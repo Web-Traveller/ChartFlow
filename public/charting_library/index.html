@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradingView Chart</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+        
+        #chart-container {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <!-- Import TradingView and Custom Datafeed -->
+    <script src="charting_library.standalone.js"></script>
+    <script src="datafeed.js"></script>
+</head>
+<body>
+    <div id="chart-container"></div>
+
+    <script>
+        let tvWidget = null;
+
+        function initWidget(symbol) {
+            if (tvWidget !== null) {
+                try {
+                    tvWidget.remove();
+                } catch(e) {
+                    console.error("Error removing widget:", e);
+                }
+            }
+
+            tvWidget = new TradingView.widget({
+                symbol: symbol || 'XAUUSD',
+                interval: '1D',
+                container: 'chart-container',
+                datafeed: mockDatafeed,
+                library_path: './',
+                locale: 'en',
+                theme: 'dark',
+                autosize: true,
+                disabled_features: [
+                    'use_localstorage_for_settings_sharing',
+                    'header_compare',
+                    'study_templates',
+                    'header_symbol_search',
+                    'header_screenshot',
+                    'header_chart_type',
+                    'header_resolutions',
+                    'header_interval'
+                ],
+                enabled_features: [
+                    'side_toolbar_in_fullscreen_mode',
+                    'header_in_fullscreen_mode'
+                ],
+                fullscreen: false,
+                debug: true
+            });
+
+            tvWidget.onChartReady(() => {
+                console.log("Chart is ready!");
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initWidget();
+        });
+    </script>
+</body>
+</html>
