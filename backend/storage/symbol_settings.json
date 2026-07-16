@@ -3,11 +3,11 @@
     "name": "XAUUSD",
     "ticker": "XAUUSD",
     "description": "Gold / U.S. Dollar",
-    "type": "forex",
+    "type": "commodity",
     "exchange": "FOREX",
     "session": "24x7",
     "timezone": "Etc/UTC",
-    "pricescale": 1000,
+    "pricescale": 100,
     "symbol_logo": "/logos/gold.svg"
   }
 }

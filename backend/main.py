@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import duckdb
-from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi import FastAPI, Form, HTTPException, Query, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
@@ -280,6 +280,7 @@ def udf_history(
     from_ts:    int           = Query(..., alias="from"),
     to_ts:      int           = Query(..., alias="to"),
     countback:  Optional[int] = Query(None),
+    session:    Optional[str] = Query(None),
     # Extra params the library may send – accepted to avoid 422 errors
     currencyCode: Optional[str] = Query(None),
     unitId:       Optional[str] = Query(None),
@@ -297,6 +298,32 @@ def udf_history(
     or  { "s":"no_data", "nextTime":<unix> }   ← tells library where next bar is
     """
     try:
+        # --- Handle session limits clamping -----------------------
+        if session:
+            if SESSIONS_FILE.exists():
+                try:
+                    sessions_data = json.loads(SESSIONS_FILE.read_text())
+                    sess = sessions_data.get(session)
+                    if sess and not sess.get("all_time"):
+                        time_start_str = sess.get("time_start")
+                        time_end_str = sess.get("time_end")
+                        if time_start_str and time_end_str:
+                            sess_start_dt = datetime.strptime(time_start_str, "%Y-%m-%d")
+                            sess_end_dt = datetime.strptime(time_end_str, "%Y-%m-%d")
+                            
+                            sess_start_ts = int(sess_start_dt.replace(tzinfo=timezone.utc).timestamp())
+                            sess_end_ts = int(sess_end_dt.replace(tzinfo=timezone.utc).timestamp())
+                            
+                            if from_ts < sess_start_ts:
+                                from_ts = sess_start_ts
+                            if to_ts > sess_end_ts:
+                                to_ts = sess_end_ts
+                            
+                            if from_ts > to_ts or to_ts < sess_start_ts or from_ts > sess_end_ts:
+                                return {"s": "no_data"}
+                except Exception as e:
+                    print("Error clamping session range:", e)
+
         table = _resolve_table(resolution)
 
         # IMPORTANT: DuckDB stores TIMESTAMP as timezone-naive UTC.
@@ -711,5 +738,250 @@ async def symbol_settings_save(request: Request):
     
     SETTINGS_FILE.write_text(json.dumps(data, indent=2))
     return {"status": "ok"}
+
+
+# ===========================================================================
+# ── BACKTESTING SESSIONS & CSV IMPORTING
+# ===========================================================================
+
+import csv
+import io
+
+SESSIONS_FILE = STORAGE_DIR / "sessions.json"
+
+@app.get("/1.1/sessions")
+def sessions_get():
+    """GET /1.1/sessions -> returns all active viewing/backtesting sessions"""
+    if not SESSIONS_FILE.exists():
+        return {}
+    try:
+        return json.loads(SESSIONS_FILE.read_text())
+    except Exception:
+        return {}
+
+
+@app.post("/1.1/sessions")
+async def sessions_save(request: Request):
+    """POST /1.1/sessions -> creates a new backtesting/viewing session after validation"""
+    body = await request.json()
+    symbol = body.get("symbol", "XAUUSD").upper()
+    all_instruments = body.get("all_instruments", False)
+    all_time = body.get("all_time", False)
+    time_start_str = body.get("time_start", "")
+    time_end_str = body.get("time_end", "")
+    name = body.get("name", "Unnamed Session")
+
+    # If not all time range, check dates and verify data in DB
+    if not all_time and not all_instruments:
+        try:
+            ts_start = datetime.strptime(time_start_str, "%Y-%m-%d")
+            ts_end = datetime.strptime(time_end_str, "%Y-%m-%d")
+        except Exception:
+            return {"status": "error", "message": "Invalid start or end date format. Use YYYY-MM-DD"}
+
+        if ts_start >= ts_end:
+            return {"status": "error", "message": "Start date must be strictly before end date"}
+
+        # Validate that database table contains data for the chosen timeframe range
+        con = get_con()
+        try:
+            # Check 1m table
+            count = con.execute(
+                "SELECT count(*) FROM candles_1m WHERE symbol = ? AND ts >= ? AND ts <= ?",
+                [symbol, ts_start, ts_end]
+            ).fetchone()[0]
+        except Exception as e:
+            count = 0
+        con.close()
+
+        if count == 0:
+            return {
+                "status": "error",
+                "message": f"No market data found in the database for {symbol} between {time_start_str} and {time_end_str}."
+            }
+
+    # Save session
+    session_id = str(uuid.uuid4())[:8]
+    sess = {
+        "id": session_id,
+        "name": name,
+        "symbol": symbol,
+        "all_instruments": all_instruments,
+        "all_time": all_time,
+        "time_start": time_start_str,
+        "time_end": time_end_str,
+        "created_at": int(_time.time())
+    }
+
+    # Read existing sessions
+    sessions_dict = {}
+    if SESSIONS_FILE.exists():
+        try:
+            sessions_dict = json.loads(SESSIONS_FILE.read_text())
+        except Exception:
+            pass
+
+    sessions_dict[session_id] = sess
+    SESSIONS_FILE.write_text(json.dumps(sessions_dict, indent=2))
+    return {"status": "ok", "session": sess}
+
+
+@app.delete("/1.1/sessions/{session_id}")
+def sessions_delete(session_id: str):
+    """DELETE /1.1/sessions/{id} -> deletes a session"""
+    if not SESSIONS_FILE.exists():
+        return {"status": "error", "message": "No sessions found"}
+    
+    try:
+        sessions_dict = json.loads(SESSIONS_FILE.read_text())
+    except Exception:
+        sessions_dict = {}
+
+    if session_id in sessions_dict:
+        del sessions_dict[session_id]
+        SESSIONS_FILE.write_text(json.dumps(sessions_dict, indent=2))
+        return {"status": "ok"}
+    return {"status": "error", "message": "Session not found"}
+
+
+@app.post("/1.1/import_csv")
+async def import_csv(
+    symbol: str = Form(...),
+    resolution: str = Form(...),
+    format_type: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """
+    Imports standard or MT4 formatted CSV files into the DuckDB database tables.
+    Resolutions: 1m, 1D, 1W
+    """
+    clean_symbol = symbol.strip().upper()
+    table = "candles_1m"
+    if resolution == "1D":
+        table = "candles_1d"
+    elif resolution == "1W":
+        table = "candles_1w"
+
+    try:
+        content = await file.read()
+        csv_text = content.decode("utf-8")
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to read file content: {str(e)}"}
+
+    # Determine delimiter based on format type
+    if format_type == "mt4":
+        delimiter = "\t" # Tab separated
+    else:
+        delimiter = ","
+
+    reader = csv.DictReader(io.StringIO(csv_text), delimiter=delimiter)
+    
+    # Map headers case-insensitively to detect headers dynamically
+    fieldnames = reader.fieldnames or []
+    headers = {k.lower().strip(): k for k in fieldnames}
+
+    if format_type == "mt4":
+        date_col = "<DATE>"
+        time_col = "<TIME>"
+        open_col = "<OPEN>"
+        high_col = "<HIGH>"
+        low_col = "<LOW>"
+        close_col = "<CLOSE>"
+        volume_col = "<VOL>" if "<VOL>" in fieldnames else "<TICKVOL>"
+        
+        # Verify required headers
+        if not all(col in fieldnames for col in [date_col, time_col, open_col, high_col, low_col, close_col]):
+            return {
+                "status": "error",
+                "message": f"Missing required MT4 columns. Expected: {date_col}, {time_col}, {open_col}, {high_col}, {low_col}, {close_col}"
+            }
+    else:
+        # Standard columns mapping
+        time_col = headers.get("time") or headers.get("timestamp") or headers.get("date") or headers.get("datetime") or headers.get("ts")
+        open_col = headers.get("open") or headers.get("o")
+        high_col = headers.get("high") or headers.get("h")
+        low_col = headers.get("low") or headers.get("l")
+        close_col = headers.get("close") or headers.get("c")
+        volume_col = headers.get("volume") or headers.get("v") or headers.get("vol")
+
+        if not all([time_col, open_col, high_col, low_col, close_col]):
+            return {
+                "status": "error",
+                "message": "Missing required CSV columns (time/date, open, high, low, close)"
+            }
+
+    con = get_con()
+    
+    # Clean previous rows for this instrument in the selected timeframe table to avoid duplicates
+    try:
+        con.execute(f"DELETE FROM {table} WHERE symbol = ?", [clean_symbol])
+    except Exception as e:
+        con.close()
+        return {"status": "error", "message": f"Failed to clean old DB records: {str(e)}"}
+
+    inserted = 0
+    batch = []
+
+    for row in reader:
+        # 1. Parse Datetime
+        try:
+            if format_type == "mt4":
+                date_val = row[date_col].strip()
+                time_val = row[time_col].strip()
+                combined_ts = f"{date_val} {time_val}"
+                # MT4 date format: YYYY.MM.DD HH:MM:SS
+                ts = datetime.strptime(combined_ts, "%Y.%m.%d %H:%M:%S")
+            else:
+                raw_ts = row[time_col].strip()
+                if raw_ts.isdigit():
+                    val = int(raw_ts)
+                    if val > 9999999999: # milliseconds
+                        ts = datetime.utcfromtimestamp(val / 1000.0)
+                    else:
+                        ts = datetime.utcfromtimestamp(val)
+                else:
+                    cleaned_ts = raw_ts.replace("T", " ").replace("Z", "")
+                    if "." in cleaned_ts:
+                        cleaned_ts = cleaned_ts.split(".")[0]
+                    # Try datetime format or date fallback
+                    try:
+                        ts = datetime.strptime(cleaned_ts, "%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        ts = datetime.strptime(cleaned_ts.split(" ")[0].strip(), "%Y-%m-%d")
+        except Exception:
+            continue # skip invalid timestamp rows
+
+        # 2. Parse numbers
+        try:
+            o = float(row[open_col])
+            h = float(row[high_col])
+            l = float(row[low_col])
+            c = float(row[close_col])
+            v = float(row[volume_col]) if (volume_col and row.get(volume_col)) else 0.0
+        except Exception:
+            continue # skip row with conversion error
+
+        batch.append((clean_symbol, ts, o, h, l, c, v))
+        if len(batch) >= 1000:
+            con.executemany(
+                f"INSERT INTO {table} (symbol, ts, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                batch
+            )
+            inserted += len(batch)
+            batch = []
+
+    if batch:
+        con.executemany(
+            f"INSERT INTO {table} (symbol, ts, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            batch
+        )
+        inserted += len(batch)
+
+    con.close()
+
+    return {
+        "status": "ok",
+        "message": f"Successfully imported {inserted} candles into {table} for {clean_symbol}."
+    }
 
 

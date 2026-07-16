@@ -79,9 +79,13 @@ const realDatafeed: any = {
     onErrorCallback: any,
   ) => {
     const { from, to, countBackwards } = periodParams;
+    const session = new URLSearchParams(window.location.search).get('session');
     let url = `${API_BASE}/history?symbol=${encodeURIComponent(symbolInfo.name)}&resolution=${encodeURIComponent(resolution)}&from=${from}&to=${to}`;
     if (countBackwards) {
       url += `&countback=${countBackwards}`;
+    }
+    if (session) {
+      url += `&session=${encodeURIComponent(session)}`;
     }
 
     fetch(url)

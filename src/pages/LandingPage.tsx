@@ -14,6 +14,8 @@ export default function LandingPage() {
             </span>
           </div>
           <div className="hidden md:flex items-center gap-8">
+            <Link to="/" className="text-slate-400 hover:text-white transition-colors">Dashboard</Link>
+            <Link to="/settings" className="text-slate-400 hover:text-white transition-colors">Settings</Link>
             <a href="#features" className="text-slate-400 hover:text-white transition-colors">Features</a>
             <a href="#about" className="text-slate-400 hover:text-white transition-colors">About</a>
           </div>

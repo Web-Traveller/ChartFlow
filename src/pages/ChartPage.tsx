@@ -74,7 +74,25 @@ export default function ChartPage() {
       return
     }
 
-    const initWidget = () => {
+    const start = async () => {
+      let activeSymbol = 'XAUUSD';
+      const session = new URLSearchParams(window.location.search).get('session');
+      if (session) {
+        try {
+          const res = await fetch('http://localhost:8000/1.1/sessions');
+          const data = await res.json();
+          const sess = data[session];
+          if (sess && sess.symbol) {
+            activeSymbol = sess.symbol;
+          }
+        } catch (e) {
+          console.error("Error loading session symbol:", e);
+        }
+      }
+      initWidget(activeSymbol);
+    };
+
+    const initWidget = (symbol: string) => {
       if (tvWidgetRef.current) {
         try {
           tvWidgetRef.current.remove()
@@ -83,10 +101,11 @@ export default function ChartPage() {
         }
       }
 
-      const lastChartId = localStorage.getItem('last_chart_id')
+      const session = new URLSearchParams(window.location.search).get('session') || 'default';
+      const lastChartId = localStorage.getItem(`last_chart_id_${session}`)
 
       tvWidgetRef.current = new window.TradingView.widget({
-        symbol: 'XAUUSD',
+        symbol: symbol,
         interval: '1D',
         container: chartContainerRef.current,
         datafeed: realDatafeed,
@@ -116,28 +135,58 @@ export default function ChartPage() {
         
         // Auto-save logic
         widget.subscribe('onAutoSaveNeeded', () => {
-          const lastChartId = localStorage.getItem('last_chart_id');
-          if (lastChartId) {
-            widget.saveChartToServer(
-              (res: any) => {
-                console.log('Autosaved chart:', res);
-              },
-              (err: any) => console.error('Autosave error:', err)
-            );
-          }
+          widget.save((state: any) => {
+            const currentSession = new URLSearchParams(window.location.search).get('session') || 'default';
+            const backupKey = `backup_chart_state_${currentSession}`;
+            localStorage.setItem(backupKey, JSON.stringify(state));
+            
+            const lastChartId = localStorage.getItem(`last_chart_id_${currentSession}`) || `backup_layout_${currentSession}`;
+            fetch('http://localhost:8000/1.1/charts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                client: 'chartflow_client',
+                user: 'default_user',
+                chart: lastChartId,
+                name: lastChartId.startsWith('backup_layout') ? `Backup Layout ${currentSession}` : 'Saved Layout',
+                content: JSON.stringify(state)
+              })
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.status === 'ok' && lastChartId.startsWith('backup_layout')) {
+                localStorage.setItem(`last_chart_id_${currentSession}`, data.id);
+              }
+            })
+            .catch(e => console.error('Backup save error:', e));
+          });
         });
 
         widget.subscribe('onChartSaved', (chartData: any) => {
           if (chartData && chartData.id) {
-            localStorage.setItem('last_chart_id', chartData.id);
+            const currentSession = new URLSearchParams(window.location.search).get('session') || 'default';
+            localStorage.setItem(`last_chart_id_${currentSession}`, chartData.id);
           }
         });
 
         widget.subscribe('onChartLoaded', (chartData: any) => {
           if (chartData && chartData.id) {
-            localStorage.setItem('last_chart_id', chartData.id);
+            const currentSession = new URLSearchParams(window.location.search).get('session') || 'default';
+            localStorage.setItem(`last_chart_id_${currentSession}`, chartData.id);
           }
         });
+
+        // Restore backup state if it exists
+        const backupKey = `backup_chart_state_${session}`;
+        const backup = localStorage.getItem(backupKey);
+        if (backup) {
+          try {
+            widget.load(JSON.parse(backup));
+            console.log(`Restored chart state backup for session: ${session}`);
+          } catch (e) {
+            console.error('Error loading backup state:', e);
+          }
+        }
 
         // Add button before symbol search (left side)
         const leftButton = widget.createButton({
@@ -179,7 +228,7 @@ export default function ChartPage() {
       })
     }
 
-    initWidget()
+    start()
   }, [isLibraryLoaded])
 
   return (
