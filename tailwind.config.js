@@ -7,30 +7,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        tv: {
-          bg: {
-            primary: 'var(--tv-bg-primary)',
-            secondary: 'var(--tv-bg-secondary)',
-            tertiary: 'var(--tv-bg-tertiary)',
-          },
-          border: 'var(--tv-border)',
-          text: {
-            primary: 'var(--tv-text-primary)',
-            muted: 'var(--tv-text-muted)',
-          },
-          brand: {
-            DEFAULT: 'var(--tv-brand)',
-            hover: 'var(--tv-brand-hover)',
-          },
-          green: {
-            DEFAULT: 'var(--tv-green)',
-            hover: 'var(--tv-green-hover)',
-          },
-          red: {
-            DEFAULT: 'var(--tv-red)',
-            hover: 'var(--tv-red-hover)',
-          }
-        }
+        'tv-bg-primary': 'var(--tv-bg-primary)',
+        'tv-bg-secondary': 'var(--tv-bg-secondary)',
+        'tv-bg-tertiary': 'var(--tv-bg-tertiary)',
+        'tv-border': 'var(--tv-border)',
+        'tv-text-primary': 'var(--tv-text-primary)',
+        'tv-text-muted': 'var(--tv-text-muted)',
+        'tv-brand': 'var(--tv-brand)',
+        'tv-brand-hover': 'var(--tv-brand-hover)',
+        'tv-green': 'var(--tv-green)',
+        'tv-green-hover': 'var(--tv-green-hover)',
+        'tv-red': 'var(--tv-red)',
+        'tv-red-hover': 'var(--tv-red-hover)',
       },
       spacing: {
         'tv-xs': 'var(--spacing-xs)',
