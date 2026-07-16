@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { CandlestickChart, Play, Trash2, Calendar, ShieldCheck, Compass, AlertCircle, Plus } from 'lucide-react'
+import { CandlestickChart, Play, Trash2, Calendar, ShieldCheck, Compass, AlertCircle, Plus, Terminal } from 'lucide-react'
 
 interface Session {
   id: string
@@ -116,27 +116,31 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white font-sans flex">
+    <div className="min-h-screen bg-tv-bg-primary text-tv-text-primary font-tv flex">
       {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-950/50 backdrop-blur flex flex-col p-6">
+      <aside className="w-64 border-r border-tv-border bg-tv-bg-secondary/50 backdrop-blur flex flex-col p-6">
         <div className="flex items-center gap-2 mb-10">
-          <CandlestickChart className="w-8 h-8 text-emerald-400" />
-          <span className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+          <CandlestickChart className="w-8 h-8 text-tv-brand" />
+          <span className="text-xl font-bold text-tv-text-primary">
             ChartFlow
           </span>
         </div>
         <nav className="flex-1 space-y-2">
-          <Link to="/" className="flex items-center gap-3 bg-slate-900 border border-slate-800 text-white px-4 py-3 rounded-xl font-medium transition-colors">
-            <Compass className="w-5 h-5 text-emerald-400" />
+          <Link to="/" className="flex items-center gap-3 bg-tv-bg-tertiary border border-tv-border text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
+            <Compass className="w-5 h-5 text-tv-brand" />
             Dashboard
           </Link>
-          <Link to="/chart" className="flex items-center gap-3 text-slate-400 hover:text-white px-4 py-3 rounded-xl font-medium transition-colors">
+          <Link to="/chart" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
             <CandlestickChart className="w-5 h-5" />
             Launch Chart
           </Link>
-          <Link to="/settings" className="flex items-center gap-3 text-slate-400 hover:text-white px-4 py-3 rounded-xl font-medium transition-colors">
+          <Link to="/settings" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
             <Plus className="w-5 h-5" />
             Settings & Import
+          </Link>
+          <Link to="/logs" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
+            <Terminal className="w-5 h-5" />
+            App Logs
           </Link>
         </nav>
       </aside>
@@ -144,10 +148,10 @@ export default function DashboardPage() {
       {/* Main Workspace Area */}
       <main className="flex-1 p-8 md:p-12 overflow-y-auto max-w-7xl">
         <div className="mb-10">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent leading-tight">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4 text-tv-text-primary leading-tight">
             Workspace Dashboard
           </h1>
-          <p className="text-slate-400 text-lg max-w-2xl">
+          <p className="text-tv-text-muted text-lg max-w-2xl">
             Configure custom viewing scopes, constrain backtesting periods, and initialize standalone market sessions.
           </p>
         </div>
@@ -155,29 +159,29 @@ export default function DashboardPage() {
         {/* Dashboard grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Create Session Form */}
-          <div className="lg:col-span-1 bg-slate-900/50 border border-slate-800 rounded-3xl p-6 shadow-2xl h-fit">
-            <h2 className="text-2xl font-bold mb-6 text-slate-200">New Backtest Session</h2>
+          <div className="lg:col-span-1 bg-tv-bg-secondary border border-tv-border rounded-tv-xl p-6 shadow-2xl h-fit">
+            <h2 className="text-2xl font-bold mb-6 text-tv-text-primary">New Backtest Session</h2>
             <form onSubmit={handleCreate} className="space-y-5">
               
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-400">Session Name</label>
+                <label className="block text-sm font-semibold text-tv-text-muted">Session Name</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Gold Jan-July 2021"
                   required
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full bg-tv-bg-primary/80 border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-400">Select Symbol</label>
+                <label className="block text-sm font-semibold text-tv-text-muted">Select Symbol</label>
                 <select
                   value={symbol}
                   onChange={(e) => setSymbol(e.target.value)}
                   disabled={allInstruments}
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50"
+                  className="w-full bg-tv-bg-primary/80 border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors disabled:opacity-50"
                 >
                   <option value="XAUUSD">{getSymbolLabel('XAUUSD')}</option>
                   <option value="XAGUSD">{getSymbolLabel('XAGUSD')}</option>
@@ -195,9 +199,9 @@ export default function DashboardPage() {
                     type="checkbox"
                     checked={allInstruments}
                     onChange={(e) => setAllInstruments(e.target.checked)}
-                    className="w-5 h-5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500"
+                    className="w-5 h-5 rounded border-tv-border bg-tv-bg-primary text-tv-brand focus:ring-tv-brand"
                   />
-                  <span className="text-sm text-slate-300 font-medium">All Instruments</span>
+                  <span className="text-sm text-tv-text-primary font-medium">All Instruments</span>
                 </label>
 
                 <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -205,37 +209,37 @@ export default function DashboardPage() {
                     type="checkbox"
                     checked={allTime}
                     onChange={(e) => setAllTime(e.target.checked)}
-                    className="w-5 h-5 rounded border-slate-800 bg-slate-950 text-emerald-500 focus:ring-emerald-500"
+                    className="w-5 h-5 rounded border-tv-border bg-tv-bg-primary text-tv-brand focus:ring-tv-brand"
                   />
-                  <span className="text-sm text-slate-300 font-medium">All Available Timeframe</span>
+                  <span className="text-sm text-tv-text-primary font-medium">All Available Timeframe</span>
                 </label>
               </div>
 
               {/* Date pickers (only shown if not allTime) */}
               {!allTime && (
-                <div className="space-y-4 pt-2 border-t border-slate-800/50">
+                <div className="space-y-4 pt-2 border-t border-tv-border/50">
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-slate-400">Start Date</label>
+                    <label className="block text-sm font-semibold text-tv-text-muted">Start Date</label>
                     <div className="relative">
                       <input
                         type="date"
                         value={timeStart}
                         onChange={(e) => setTimeStart(e.target.value)}
                         required
-                        className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                        className="w-full bg-tv-bg-primary/80 border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-slate-400">End Date</label>
+                    <label className="block text-sm font-semibold text-tv-text-muted">End Date</label>
                     <div className="relative">
                       <input
                         type="date"
                         value={timeEnd}
                         onChange={(e) => setTimeEnd(e.target.value)}
                         required
-                        className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                        className="w-full bg-tv-bg-primary/80 border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
                       />
                     </div>
                   </div>
@@ -244,13 +248,13 @@ export default function DashboardPage() {
 
               {/* Status Indicator */}
               {status === 'success' && (
-                <div className="flex items-center gap-2 text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 p-3.5 rounded-xl text-sm">
+                <div className="flex items-center gap-2 text-tv-green bg-tv-green/10 border border-tv-green/25 p-3.5 rounded-tv-md text-sm">
                   <ShieldCheck className="w-5 h-5 flex-shrink-0" />
                   <span>{message}</span>
                 </div>
               )}
               {status === 'error' && (
-                <div className="flex items-center gap-2 text-rose-400 bg-rose-500/10 border border-rose-500/25 p-3.5 rounded-xl text-sm">
+                <div className="flex items-center gap-2 text-tv-red bg-tv-red/10 border border-tv-red/25 p-3.5 rounded-tv-md text-sm">
                   <AlertCircle className="w-5 h-5 flex-shrink-0" />
                   <span>{message}</span>
                 </div>
@@ -259,7 +263,7 @@ export default function DashboardPage() {
               <button
                 type="submit"
                 disabled={status === 'loading'}
-                className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold py-4 rounded-xl transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full bg-tv-brand hover:bg-tv-brand-hover text-tv-text-primary font-bold py-4 rounded-tv-md transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 Create Session
               </button>
@@ -268,12 +272,12 @@ export default function DashboardPage() {
           </div>
 
           {/* Active Sessions List */}
-          <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col min-h-[400px]">
-            <h2 className="text-2xl font-bold mb-6 text-slate-200">Active Viewing Sessions</h2>
+          <div className="lg:col-span-2 bg-tv-bg-secondary border border-tv-border rounded-tv-xl p-6 shadow-2xl flex flex-col min-h-[400px]">
+            <h2 className="text-2xl font-bold mb-6 text-tv-text-primary">Active Viewing Sessions</h2>
             
             {Object.keys(sessions).length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-slate-500">
-                <Calendar className="w-12 h-12 mb-4 text-slate-600" />
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-tv-text-muted">
+                <Calendar className="w-12 h-12 mb-4 text-tv-text-muted/60" />
                 <p className="text-lg">No active viewing sessions found.</p>
                 <p className="text-sm">Create a session using the form on the left to start backtesting.</p>
               </div>
@@ -281,30 +285,30 @@ export default function DashboardPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 text-sm font-semibold">
+                    <tr className="border-b border-tv-border text-tv-text-muted text-sm font-semibold">
                       <th className="pb-4 pr-4">Session Info</th>
                       <th className="pb-4 pr-4">Scope</th>
                       <th className="pb-4 pr-4">Date Range</th>
                       <th className="pb-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/50">
+                  <tbody className="divide-y divide-tv-border/50">
                     {Object.values(sessions)
                       .sort((a, b) => b.created_at - a.created_at)
                       .map((sess) => (
-                        <tr key={sess.id} className="text-slate-300 hover:bg-slate-900/30 transition-colors">
+                        <tr key={sess.id} className="text-tv-text-primary hover:bg-tv-bg-tertiary/30 transition-colors">
                           <td className="py-4 pr-4">
-                            <div className="font-semibold text-slate-100">{sess.name}</div>
-                            <div className="text-xs text-slate-500">ID: {sess.id}</div>
+                            <div className="font-semibold text-tv-text-primary">{sess.name}</div>
+                            <div className="text-xs text-tv-text-muted font-mono">ID: {sess.id}</div>
                           </td>
                           <td className="py-4 pr-4">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-tv-full text-xs font-semibold bg-tv-brand/10 text-tv-brand border border-tv-brand/20">
                               {sess.all_instruments ? 'All Symbols' : sess.symbol}
                             </span>
                           </td>
-                          <td className="py-4 pr-4 text-sm font-mono text-slate-400">
+                          <td className="py-4 pr-4 text-sm font-mono text-tv-text-muted">
                             {sess.all_time ? (
-                              <span className="text-slate-500">All available data</span>
+                              <span className="text-tv-text-muted/60">All available data</span>
                             ) : (
                               `${sess.time_start} to ${sess.time_end}`
                             )}
@@ -313,14 +317,14 @@ export default function DashboardPage() {
                             <div className="flex items-center justify-end gap-3">
                               <a
                                 href={`/chart?session=${sess.id}`}
-                                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-4.5 py-2 rounded-lg transition-all text-sm flex items-center gap-1.5 hover:scale-105"
+                                className="bg-tv-brand hover:bg-tv-brand-hover text-tv-text-primary font-semibold px-4.5 py-2 rounded-tv-sm transition-all text-sm flex items-center gap-1.5 hover:scale-105"
                               >
-                                <Play className="w-4 h-4 fill-slate-950" />
+                                <Play className="w-4 h-4 fill-tv-text-primary text-tv-text-primary" />
                                 Launch
                               </a>
                               <button
                                 onClick={() => handleDelete(sess.id)}
-                                className="bg-slate-950 border border-slate-850 hover:border-rose-500/30 text-slate-400 hover:text-rose-400 p-2.5 rounded-lg transition-all"
+                                className="bg-tv-bg-primary border border-tv-border hover:border-tv-red/30 text-tv-text-muted hover:text-tv-red p-2.5 rounded-tv-sm transition-all"
                                 title="Delete Session"
                               >
                                 <Trash2 className="w-4 h-4" />
