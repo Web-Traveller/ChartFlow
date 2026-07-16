@@ -1,0 +1,13 @@
+{
+  "XAUUSD": {
+    "name": "XAUUSD",
+    "ticker": "XAUUSD",
+    "description": "Gold / U.S. Dollar",
+    "type": "forex",
+    "exchange": "FOREX",
+    "session": "24x7",
+    "timezone": "Etc/UTC",
+    "pricescale": 1000,
+    "symbol_logo": "/logos/gold.svg"
+  }
+}

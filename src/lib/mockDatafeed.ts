@@ -59,7 +59,7 @@ const mockDatafeed: any = {
   ) => {
     const { from, to, countBackwards } = periodParams;
 
-    const bars = [];
+    const bars: any[] = [];
     let time = from * 1000;
     let basePrice = 50000.0;
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import mockDatafeed from '../lib/mockDatafeed'
+import realDatafeed from '../lib/realDatafeed'
 
 declare global {
   interface Window {
@@ -61,9 +61,11 @@ export default function ChartPage() {
       console.info = originalConsoleInfo
       
       document.head.removeChild(script)
-      if (mockDatafeed._intervalId) {
-        clearInterval(mockDatafeed._intervalId)
-      }
+      // Clear any active datafeed intervals
+      Object.keys(realDatafeed._intervals).forEach(key => {
+        clearInterval(realDatafeed._intervals[key])
+        delete realDatafeed._intervals[key]
+      })
     }
   }, [])
 
@@ -81,15 +83,23 @@ export default function ChartPage() {
         }
       }
 
+      const lastChartId = localStorage.getItem('last_chart_id')
+
       tvWidgetRef.current = new window.TradingView.widget({
         symbol: 'XAUUSD',
         interval: '1D',
         container: chartContainerRef.current,
-        datafeed: mockDatafeed,
+        datafeed: realDatafeed,
         library_path: '/charting_library/',
         locale: 'en',
         theme: 'dark',
         autosize: true,
+        charts_storage_url: 'http://localhost:8000',
+        charts_storage_api_version: '1.1',
+        client_id: 'chartflow_client',
+        user_id: 'default_user',
+        ...(lastChartId ? { chart_id: lastChartId } : {}),
+        autosave: true,
         disabled_features: [
         ],
         enabled_features: [
@@ -104,6 +114,31 @@ export default function ChartPage() {
         // Add custom buttons to TradingView header
         const widget = tvWidgetRef.current
         
+        // Auto-save logic
+        widget.subscribe('onAutoSaveNeeded', () => {
+          const lastChartId = localStorage.getItem('last_chart_id');
+          if (lastChartId) {
+            widget.saveChartToServer(
+              (res: any) => {
+                console.log('Autosaved chart:', res);
+              },
+              (err: any) => console.error('Autosave error:', err)
+            );
+          }
+        });
+
+        widget.subscribe('onChartSaved', (chartData: any) => {
+          if (chartData && chartData.id) {
+            localStorage.setItem('last_chart_id', chartData.id);
+          }
+        });
+
+        widget.subscribe('onChartLoaded', (chartData: any) => {
+          if (chartData && chartData.id) {
+            localStorage.setItem('last_chart_id', chartData.id);
+          }
+        });
+
         // Add button before symbol search (left side)
         const leftButton = widget.createButton({
           align: 'left',
@@ -112,6 +147,16 @@ export default function ChartPage() {
         leftButton.title = 'Back to Home'
         leftButton.addEventListener('click', () => {
           window.location.href = '/'
+        })
+
+        // Add settings button
+        const settingsButton = widget.createButton({
+          align: 'left',
+        })
+        settingsButton.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`
+        settingsButton.title = 'Settings'
+        settingsButton.addEventListener('click', () => {
+          window.location.href = '/settings'
         })
         
         // Add theme toggle button (right side)
@@ -122,11 +167,11 @@ export default function ChartPage() {
         const sunIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`
         themeButton.innerHTML = moonIcon
         themeButton.title = 'Toggle Theme'
+        let currentTheme = 'dark'
         themeButton.addEventListener('click', () => {
-          // Use TradingView's applyOptions method to change theme
-          const currentTheme = widget._options.theme
           const newTheme = currentTheme === 'dark' ? 'light' : 'dark'
-          widget.applyOptions({ theme: newTheme })
+          widget.changeTheme(newTheme)
+          currentTheme = newTheme
           themeButton.innerHTML = newTheme === 'dark' ? moonIcon : sunIcon
         })
         

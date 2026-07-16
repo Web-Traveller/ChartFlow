@@ -186,18 +186,27 @@ def udf_symbols(symbol: str = Query(...)):
         # UDF error signal for resolveSymbol
         return {"s": "error", "errmsg": f"Unknown symbol '{clean}'"}
 
+    # Load settings from file if exists
+    settings_path = Path(__file__).resolve().parent / "storage" / "symbol_settings.json"
+    symbol_config = {}
+    if settings_path.exists():
+        try:
+            symbol_config = json.loads(settings_path.read_text()).get(clean, {})
+        except Exception:
+            pass
+
     return {
-        "name":            clean,
-        "ticker":          clean,
-        "description":     f"{clean} – Local DuckDB",
-        "type":            "forex",
-        "exchange":        "FOREX",
-        "listed_exchange": "FOREX",
-        "session":         "24x7",
-        "timezone":        "Etc/UTC",
+        "name":            symbol_config.get("name", clean),
+        "ticker":          symbol_config.get("ticker", clean),
+        "description":     symbol_config.get("description", f"{clean} – Local DuckDB"),
+        "type":            symbol_config.get("type", "forex"),
+        "exchange":        symbol_config.get("exchange", "FOREX"),
+        "listed_exchange": symbol_config.get("exchange", "FOREX"),
+        "session":         symbol_config.get("session", "24x7"),
+        "timezone":        symbol_config.get("timezone", "Etc/UTC"),
         "format":          "price",
         "minmov":          1,
-        "pricescale":      100000,   # 5 decimal places (standard forex)
+        "pricescale":      int(symbol_config.get("pricescale", 100000)),
         "minmove2":        0,
         "fractional":      False,
         "has_intraday":          True,
@@ -208,6 +217,7 @@ def udf_symbols(symbol: str = Query(...)):
         "intraday_multipliers":  ["1", "5", "15", "30", "60", "240"],
         "volume_precision":      2,
         "data_status":           "streaming",
+        "symbol_logo":           symbol_config.get("symbol_logo", "/logos/default.png")
     }
 
 
@@ -232,15 +242,25 @@ def udf_search(
 
     q = query.strip().upper()
     results = []
+    
+    settings_path = Path(__file__).resolve().parent / "storage" / "symbol_settings.json"
+    symbol_settings = {}
+    if settings_path.exists():
+        try:
+            symbol_settings = json.loads(settings_path.read_text())
+        except Exception:
+            pass
+
     for sym in symbols:
         if q and q not in sym.upper():
             continue
+        cfg = symbol_settings.get(sym, {})
         results.append({
             "symbol":      sym,
-            "full_name":   f"FOREX:{sym}",
-            "description": f"{sym} – Local DuckDB",
-            "exchange":    "FOREX",
-            "type":        "forex",
+            "full_name":   f"{cfg.get('exchange', 'FOREX')}:{sym}",
+            "description": cfg.get("description", f"{sym} – Local DuckDB"),
+            "exchange":    cfg.get("exchange", "FOREX"),
+            "type":        cfg.get("type", "forex"),
             "ticker":      sym,
         })
         if len(results) >= limit:
@@ -299,7 +319,10 @@ def udf_history(
         db_last_dt = last_row[0] if (last_row and last_row[0]) else None
 
         if db_last_dt and to_dt > db_last_dt:
+            # Shift the entire window backward so we capture the same duration of data ending at db_last_dt
+            duration = to_dt - from_dt
             to_dt = db_last_dt   # clamp: never ask beyond what we have
+            from_dt = to_dt - duration
 
         if countback and countback > 0:
             # Return exactly `countback` bars ending at (and including) to_dt.
@@ -388,7 +411,16 @@ def udf_quotes(symbols: str = Query(...)):
             """,
             [sym],
         ).fetchone()
+        settings_path = Path(__file__).resolve().parent / "storage" / "symbol_settings.json"
+        symbol_settings = {}
+        if settings_path.exists():
+            try:
+                symbol_settings = json.loads(settings_path.read_text())
+            except Exception:
+                pass
+
         if row:
+            cfg = symbol_settings.get(sym, {})
             data.append({
                 "s": "ok",
                 "n": sym,
@@ -396,8 +428,8 @@ def udf_quotes(symbols: str = Query(...)):
                     "ch":               0.0,
                     "chp":              0.0,
                     "short_name":       sym,
-                    "exchange":         "FOREX",
-                    "description":      f"{sym} – Local DuckDB",
+                    "exchange":         cfg.get("exchange", "FOREX"),
+                    "description":      cfg.get("description", f"{sym} – Local DuckDB"),
                     "lp":               float(row[4]),   # last price = close
                     "open_price":       float(row[1]),
                     "high_price":       float(row[2]),
@@ -477,7 +509,9 @@ def charts_get(
         if not p.exists():
             return {"status": "error", "message": "Chart not found"}
         data = json.loads(p.read_text())
-        if data.get("clientId") != client or data.get("userId") != user:
+        db_client = data.get("clientId", "")
+        db_user = data.get("userId", "")
+        if (db_client and db_client != client) or (db_user and db_user != user):
             return {"status": "error", "message": "Chart not found"}
         return {"status": "ok", "data": data}
 
@@ -486,7 +520,9 @@ def charts_get(
     for f in CHARTS_DIR.glob("*.json"):
         try:
             d = json.loads(f.read_text())
-            if d.get("clientId") == client and d.get("userId") == user:
+            db_client = d.get("clientId", "")
+            db_user = d.get("userId", "")
+            if (not db_client or db_client == client) and (not db_user or db_user == user):
                 results.append({"id": d["id"], "name": d["name"], "timestamp": d["timestamp"]})
         except Exception:
             pass
@@ -506,8 +542,9 @@ async def charts_save(request: Request):
         form = await request.form()
         body = dict(form)
 
-    client   = body.get("client", "")
-    user     = body.get("user", "")
+    # Check query params first, then fallback to request body
+    client   = request.query_params.get("client") or body.get("client") or ""
+    user     = request.query_params.get("user") or body.get("user") or ""
     name     = body.get("name", "Unnamed")
     content  = body.get("content", "")
     chart_id = body.get("chart")
@@ -516,7 +553,13 @@ async def charts_save(request: Request):
         p = _chart_path(str(chart_id))
         if p.exists():
             data = json.loads(p.read_text())
-            data.update({"name": name, "content": content, "timestamp": int(_time.time())})
+            data.update({
+                "name": name,
+                "content": content,
+                "timestamp": int(_time.time()),
+                "clientId": client,
+                "userId": user
+            })
             p.write_text(json.dumps(data))
             return {"status": "ok", "id": chart_id}
 
@@ -559,23 +602,26 @@ def charts_delete(
 
 @app.get("/1.1/drawing_templates")
 def drawing_templates_get(
+    request:      Request,
     client:       str           = Query(...),
     user:         str           = Query(...),
     tool:         str           = Query(...),
     templateName: Optional[str] = Query(None),
+    template:     Optional[str] = Query(None),
 ):
     """
     GET /1.1/drawing_templates?client=&user=&tool=
         → returns list of template names
-    GET /1.1/drawing_templates?client=&user=&tool=&templateName=
+    GET /1.1/drawing_templates?client=&user=&tool=&name=templateName
         → returns template content
     """
     d = _tmpl_path(client, user, tool)
+    name = request.query_params.get("name") or templateName or template
 
-    if templateName:
-        p = d / f"{templateName}.json"
+    if name:
+        p = d / f"{name}.json"
         if not p.exists():
-            return {"status": "error", "message": f"Template '{templateName}' not found"}
+            return {"status": "error", "message": f"Template '{name}' not found"}
         return {"status": "ok", "data": {"content": p.read_text()}}
 
     names = [f.stem for f in d.glob("*.json")]
@@ -595,10 +641,10 @@ async def drawing_templates_save(request: Request):
         form = await request.form()
         body = dict(form)
 
-    client        = body.get("client", "")
-    user          = body.get("user", "")
-    tool          = body.get("tool", "")
-    template_name = body.get("templateName", "")
+    client        = request.query_params.get("client") or body.get("client") or ""
+    user          = request.query_params.get("user") or body.get("user") or ""
+    tool          = body.get("tool") or request.query_params.get("tool") or ""
+    template_name = body.get("name") or body.get("templateName") or request.query_params.get("name") or request.query_params.get("templateName") or ""
     content       = body.get("content", "")
 
     if not (client and user and tool and template_name):
@@ -611,15 +657,59 @@ async def drawing_templates_save(request: Request):
 
 @app.delete("/1.1/drawing_templates")
 def drawing_templates_delete(
+    request:      Request,
     client:       str = Query(...),
     user:         str = Query(...),
     tool:         str = Query(...),
-    templateName: str = Query(...),
+    templateName: Optional[str] = Query(None),
+    template:     Optional[str] = Query(None),
 ):
-    """DELETE /1.1/drawing_templates?client=&user=&tool=&templateName="""
-    p = _tmpl_path(client, user, tool) / f"{templateName}.json"
+    """DELETE /1.1/drawing_templates?client=&user=&tool=&name="""
+    name = request.query_params.get("name") or templateName or template
+    if not name:
+        return {"status": "error", "message": "Missing template parameter"}
+
+    p = _tmpl_path(client, user, tool) / f"{name}.json"
     if not p.exists():
-        return {"status": "error", "message": f"Template '{templateName}' not found"}
+        return {"status": "error", "message": f"Template '{name}' not found"}
     p.unlink()
     return {"status": "ok"}
+
+
+# ===========================================================================
+# ── SYMBOL CONFIGURATION & SETTINGS
+# ===========================================================================
+
+SETTINGS_FILE = STORAGE_DIR / "symbol_settings.json"
+
+@app.get("/1.1/symbol_settings")
+def symbol_settings_get():
+    """GET /1.1/symbol_settings -> returns current symbol configs"""
+    if not SETTINGS_FILE.exists():
+        return {}
+    try:
+        return json.loads(SETTINGS_FILE.read_text())
+    except Exception:
+        return {}
+
+
+@app.post("/1.1/symbol_settings")
+async def symbol_settings_save(request: Request):
+    """POST /1.1/symbol_settings -> saves/updates symbol configs"""
+    body: dict = await request.json()
+    
+    # Read existing
+    data = {}
+    if SETTINGS_FILE.exists():
+        try:
+            data = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+            
+    # Update
+    data.update(body)
+    
+    SETTINGS_FILE.write_text(json.dumps(data, indent=2))
+    return {"status": "ok"}
+
 

@@ -15,7 +15,6 @@ export default function LandingPage() {
           </div>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-slate-400 hover:text-white transition-colors">Features</a>
-            <a href="#pricing" className="text-slate-400 hover:text-white transition-colors">Pricing</a>
             <a href="#about" className="text-slate-400 hover:text-white transition-colors">About</a>
           </div>
           <Link to="/chart" className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-2.5 rounded-lg transition-all hover:scale-105">
