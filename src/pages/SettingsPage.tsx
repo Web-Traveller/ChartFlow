@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { CandlestickChart, Save, CheckCircle2, AlertTriangle, RefreshCw, Compass, Plus, Database, UploadCloud } from 'lucide-react'
+import { CandlestickChart, Save, CheckCircle2, AlertTriangle, RefreshCw, Compass, Plus, Terminal } from 'lucide-react'
 
 interface SymbolConfig {
   name: string
@@ -15,7 +15,23 @@ interface SymbolConfig {
 }
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'symbol' | 'import'>('symbol')
+  // Tab control
+  const [activeTab, setActiveTab] = useState<'symbol' | 'app'>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tabParam = params.get('tab')
+    return tabParam === 'app' ? 'app' : 'symbol'
+  })
+
+  // Listen to search changes (e.g. back buttons)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tabParam = params.get('tab')
+    if (tabParam === 'app' || tabParam === 'symbol') {
+      setActiveTab(tabParam)
+    }
+  }, [window.location.search])
+
+  // Symbol Configuration states
   const [configs, setConfigs] = useState<{ [key: string]: SymbolConfig }>({})
   const [selectedSymbol, setSelectedSymbol] = useState('XAUUSD')
   const [description, setDescription] = useState('')
@@ -28,17 +44,16 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
-  // CSV Importer state
-  const [csvSymbol, setCsvSymbol] = useState('XAUUSD')
-  const [csvResolution, setCsvResolution] = useState('1m')
-  const [csvFormat, setCsvFormat] = useState('mt4')
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [isImporting, setIsImporting] = useState(false)
-  const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [importMessage, setImportMessage] = useState('')
+  // Application Settings states
+  const [dataFolderPath, setDataFolderPath] = useState('/home/ajinkya/projects/TestsGithub/16_july/db')
+  const [defaultRiskPct, setDefaultRiskPct] = useState(1.0)
+  const [defaultTimeframe, setDefaultTimeframe] = useState('1D')
+  const [appTheme, setAppTheme] = useState('dark')
+  const [isSavingApp, setIsSavingApp] = useState(false)
+  const [saveAppStatus, setSaveAppStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
   useEffect(() => {
-    // Fetch current settings
+    // Fetch symbol settings
     fetch('http://localhost:8000/1.1/symbol_settings')
       .then(res => res.json())
       .then(data => {
@@ -58,6 +73,19 @@ export default function SettingsPage() {
         }
       })
       .catch(err => console.error('Error fetching settings:', err))
+
+    // Fetch app settings
+    fetch('http://localhost:8000/1.1/app_settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data) {
+          if (data.data_folder_path) setDataFolderPath(data.data_folder_path)
+          if (data.default_risk_pct !== undefined) setDefaultRiskPct(data.default_risk_pct)
+          if (data.default_timeframe) setDefaultTimeframe(data.default_timeframe)
+          if (data.theme) setAppTheme(data.theme)
+        }
+      })
+      .catch(err => console.error('Error fetching app settings:', err))
   }, [])
 
   const loadSymbolConfig = (cfg: SymbolConfig) => {
@@ -105,7 +133,7 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSaveSymbolSettings = (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
     setSaveStatus('idle')
@@ -149,73 +177,68 @@ export default function SettingsPage() {
       })
   }
 
-  const handleImport = (e: React.FormEvent) => {
+  const handleSaveAppSettings = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedFile) {
-      setImportStatus('error')
-      setImportMessage('Please select a file to import')
-      return
+    setIsSavingApp(true)
+    setSaveAppStatus('idle')
+
+    const payload = {
+      data_folder_path: dataFolderPath,
+      default_risk_pct: Number(defaultRiskPct),
+      default_timeframe: defaultTimeframe,
+      theme: appTheme
     }
 
-    setIsImporting(true)
-    setImportStatus('idle')
-    setImportMessage('')
-
-    const formData = new FormData()
-    formData.append('symbol', csvSymbol)
-    formData.append('resolution', csvResolution)
-    formData.append('format_type', csvFormat)
-    formData.append('file', selectedFile)
-
-    fetch('http://localhost:8000/1.1/import_csv', {
+    fetch('http://localhost:8000/1.1/app_settings', {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
     })
       .then(res => res.json())
       .then(data => {
         if (data.status === 'ok') {
-          setImportStatus('success')
-          setImportMessage(data.message)
-          setSelectedFile(null)
-          // Reset file input element if needed
-          const fileInput = document.getElementById('csv-file-input') as HTMLInputElement
-          if (fileInput) fileInput.value = ''
+          setSaveAppStatus('success')
         } else {
-          setImportStatus('error')
-          setImportMessage(data.message || 'Import failed.')
+          setSaveAppStatus('error')
         }
       })
       .catch(() => {
-        setImportStatus('error')
-        setImportMessage('Network error occurred during import.')
+        setSaveAppStatus('error')
       })
       .finally(() => {
-        setIsImporting(false)
+        setIsSavingApp(false)
+        setTimeout(() => setSaveAppStatus('idle'), 4000)
       })
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white font-sans flex">
+    <div className="min-h-screen bg-tv-bg-primary text-tv-text-primary font-tv flex">
       {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-950/50 backdrop-blur flex flex-col p-6">
+      <aside className="w-64 border-r border-tv-border bg-tv-bg-secondary/50 backdrop-blur flex flex-col p-6">
         <div className="flex items-center gap-2 mb-10">
-          <CandlestickChart className="w-8 h-8 text-emerald-400" />
-          <span className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+          <CandlestickChart className="w-8 h-8 text-tv-brand" />
+          <span className="text-xl font-bold text-tv-text-primary">
             ChartFlow
           </span>
         </div>
         <nav className="flex-1 space-y-2">
-          <Link to="/" className="flex items-center gap-3 text-slate-400 hover:text-white px-4 py-3 rounded-xl font-medium transition-colors">
+          <Link to="/" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
             <Compass className="w-5 h-5" />
             Dashboard
           </Link>
-          <Link to="/chart" className="flex items-center gap-3 text-slate-400 hover:text-white px-4 py-3 rounded-xl font-medium transition-colors">
+          <Link to="/chart" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
             <CandlestickChart className="w-5 h-5" />
             Launch Chart
           </Link>
-          <Link to="/settings" className="flex items-center gap-3 bg-slate-900 border border-slate-800 text-white px-4 py-3 rounded-xl font-medium transition-colors">
-            <Plus className="w-5 h-5 text-emerald-400" />
-            Settings & Import
+          <Link to="/settings" className="flex items-center gap-3 bg-tv-bg-tertiary border border-tv-border text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
+            <Plus className="w-5 h-5 text-tv-brand" />
+            Settings Manager
+          </Link>
+          <Link to="/logs" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
+            <Terminal className="w-5 h-5" />
+            App Logs
           </Link>
         </nav>
       </aside>
@@ -223,53 +246,59 @@ export default function SettingsPage() {
       {/* Main Workspace Area */}
       <main className="flex-1 p-8 md:p-12 overflow-y-auto max-w-4xl">
         <div className="mb-10">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent leading-tight">
-            Settings & Database Manager
+          <h1 className="text-4xl md:text-5xl font-bold mb-4 text-tv-text-primary leading-tight">
+            Settings & Configurations
           </h1>
-          <p className="text-slate-400 text-lg max-w-2xl">
-            Configure symbol tickers, pricescales, or import historical MetaTrader/standard quotes directly into the DuckDB database.
+          <p className="text-tv-text-muted text-lg max-w-2xl">
+            Configure symbol information, pricing models, database storage layouts, and application defaults.
           </p>
         </div>
 
         {/* Tab Selection */}
-        <div className="flex border-b border-slate-800 mb-8 gap-6">
+        <div className="flex border-b border-tv-border mb-8 gap-6">
           <button
-            onClick={() => setActiveTab('symbol')}
+            onClick={() => {
+              setActiveTab('symbol')
+              window.history.pushState(null, '', '/settings?tab=symbol')
+            }}
             className={`pb-4 text-lg font-semibold border-b-2 px-1 transition-all ${
               activeTab === 'symbol'
-                ? 'border-emerald-400 text-emerald-400'
-                : 'border-transparent text-slate-500 hover:text-slate-300'
+                ? 'border-tv-brand text-tv-brand'
+                : 'border-transparent text-tv-text-muted hover:text-tv-text-primary'
             }`}
           >
-            Symbol Metadata
+            Symbol Configuration
           </button>
           <button
-            onClick={() => setActiveTab('import')}
+            onClick={() => {
+              setActiveTab('app')
+              window.history.pushState(null, '', '/settings?tab=app')
+            }}
             className={`pb-4 text-lg font-semibold border-b-2 px-1 transition-all ${
-              activeTab === 'import'
-                ? 'border-emerald-400 text-emerald-400'
-                : 'border-transparent text-slate-500 hover:text-slate-300'
+              activeTab === 'app'
+                ? 'border-tv-brand text-tv-brand'
+                : 'border-transparent text-tv-text-muted hover:text-tv-text-primary'
             }`}
           >
-            CSV Historical Importer
+            Application Settings
           </button>
         </div>
 
-        {/* TAB 1: SYMBOL SETTINGS */}
+        {/* TAB 1: SYMBOL CONFIGURATION */}
         {activeTab === 'symbol' && (
-          <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 backdrop-blur-xl shadow-2xl">
-            <form onSubmit={handleSave} className="space-y-6">
+          <div className="bg-tv-bg-secondary border border-tv-border rounded-tv-xl p-8 backdrop-blur-xl shadow-2xl">
+            <form onSubmit={handleSaveSymbolSettings} className="space-y-6">
               
               {/* Symbol Select Option */}
               <div className="space-y-2">
-                <label htmlFor="symbol" className="block text-sm font-semibold text-slate-400">
+                <label htmlFor="symbol" className="block text-sm font-semibold text-tv-text-muted">
                   Select Active Symbol
                 </label>
                 <select
                   id="symbol"
                   value={selectedSymbol}
                   onChange={(e) => handleSymbolChange(e.target.value)}
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                  className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
                 >
                   <option value="XAUUSD">XAUUSD (Gold Spot)</option>
                   <option value="XAGUSD">XAGUSD (Silver Spot)</option>
@@ -280,14 +309,14 @@ export default function SettingsPage() {
                 </select>
               </div>
 
-              <hr className="border-slate-800 my-8" />
+              <hr className="border-tv-border my-8" />
 
               {/* Config Fields Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
                 {/* Description */}
                 <div className="space-y-2">
-                  <label htmlFor="description" className="block text-sm font-semibold text-slate-400">
+                  <label htmlFor="description" className="block text-sm font-semibold text-tv-text-muted">
                     Custom Description
                   </label>
                   <input
@@ -297,20 +326,20 @@ export default function SettingsPage() {
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="e.g. Gold Spot / U.S. Dollar"
                     required
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
                   />
                 </div>
 
                 {/* Asset Type */}
                 <div className="space-y-2">
-                  <label htmlFor="type" className="block text-sm font-semibold text-slate-400">
+                  <label htmlFor="type" className="block text-sm font-semibold text-tv-text-muted">
                     Asset Type
                   </label>
                   <select
                     id="type"
                     value={type}
                     onChange={(e) => setType(e.target.value)}
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
                   >
                     <option value="forex">Forex</option>
                     <option value="commodity">Commodity</option>
@@ -322,7 +351,7 @@ export default function SettingsPage() {
 
                 {/* Exchange */}
                 <div className="space-y-2">
-                  <label htmlFor="exchange" className="block text-sm font-semibold text-slate-400">
+                  <label htmlFor="exchange" className="block text-sm font-semibold text-tv-text-muted">
                     Exchange Name
                   </label>
                   <input
@@ -332,20 +361,20 @@ export default function SettingsPage() {
                     onChange={(e) => setExchange(e.target.value.toUpperCase())}
                     placeholder="e.g. FOREX or COMEX"
                     required
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
                   />
                 </div>
 
                 {/* Price Scale */}
                 <div className="space-y-2">
-                  <label htmlFor="pricescale" className="block text-sm font-semibold text-slate-400">
+                  <label htmlFor="pricescale" className="block text-sm font-semibold text-tv-text-muted">
                     Price Scale / Precision
                   </label>
                   <select
                     id="pricescale"
                     value={priceScale}
                     onChange={(e) => setPriceScale(Number(e.target.value))}
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
                   >
                     <option value={100}>100 (2 decimals - e.g. Cryptos / Commodities)</option>
                     <option value={1000}>1000 (3 decimals - e.g. indices / pairs)</option>
@@ -355,7 +384,7 @@ export default function SettingsPage() {
 
                 {/* Session */}
                 <div className="space-y-2">
-                  <label htmlFor="session" className="block text-sm font-semibold text-slate-400">
+                  <label htmlFor="session" className="block text-sm font-semibold text-tv-text-muted">
                     Market Session Hours
                   </label>
                   <input
@@ -365,13 +394,13 @@ export default function SettingsPage() {
                     onChange={(e) => setSession(e.target.value)}
                     placeholder="e.g. 24x7 or 0900-1600"
                     required
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
                   />
                 </div>
 
                 {/* Timezone */}
                 <div className="space-y-2">
-                  <label htmlFor="timezone" className="block text-sm font-semibold text-slate-400">
+                  <label htmlFor="timezone" className="block text-sm font-semibold text-tv-text-muted">
                     Timezone
                   </label>
                   <input
@@ -381,13 +410,13 @@ export default function SettingsPage() {
                     onChange={(e) => setTimezone(e.target.value)}
                     placeholder="e.g. Etc/UTC or America/New_York"
                     required
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
                   />
                 </div>
 
                 {/* Logo URL */}
                 <div className="space-y-2 md:col-span-2">
-                  <label htmlFor="logourl" className="block text-sm font-semibold text-slate-400">
+                  <label htmlFor="logourl" className="block text-sm font-semibold text-tv-text-muted">
                     Symbol Logo Path
                   </label>
                   <div className="flex gap-4 items-center">
@@ -398,9 +427,9 @@ export default function SettingsPage() {
                       onChange={(e) => setLogoUrl(e.target.value)}
                       placeholder="e.g. /logos/gold.svg"
                       required
-                      className="flex-1 bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                      className="flex-1 bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
                     />
-                    <div className="w-12 h-12 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center overflow-hidden p-2">
+                    <div className="w-12 h-12 bg-tv-bg-primary border border-tv-border rounded-tv-md flex items-center justify-center overflow-hidden p-2">
                       <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" onError={(e) => {
                         (e.target as HTMLImageElement).src = '/logos/default.png'
                       }} />
@@ -415,7 +444,7 @@ export default function SettingsPage() {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex-1 max-w-xs bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold py-4 rounded-xl transition-all hover:scale-105 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/10 disabled:opacity-50"
+                  className="flex-1 max-w-xs bg-tv-brand hover:bg-tv-brand-hover text-tv-text-primary font-bold py-4 rounded-tv-sm transition-all hover:scale-105 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-tv-brand/10 disabled:opacity-50"
                 >
                   {isSaving ? (
                     <>
@@ -425,22 +454,22 @@ export default function SettingsPage() {
                   ) : (
                     <>
                       <Save className="w-5 h-5" />
-                      Save Settings
+                      Save Symbol Configuration
                     </>
                   )}
                 </button>
 
                 {/* Status Banner */}
                 {saveStatus === 'success' && (
-                  <div className="flex items-center gap-2 text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/25 px-4 py-3.5 rounded-xl text-sm">
+                  <div className="flex items-center gap-2 text-tv-green bg-tv-green/10 border border-tv-green/25 px-4 py-3.5 rounded-tv-md text-sm font-semibold">
                     <CheckCircle2 className="w-5 h-5" />
-                    <span>Settings updated!</span>
+                    <span>Symbol Configuration updated!</span>
                   </div>
                 )}
                 {saveStatus === 'error' && (
-                  <div className="flex items-center gap-2 text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/25 px-4 py-3.5 rounded-xl text-sm">
+                  <div className="flex items-center gap-2 text-tv-red bg-tv-red/10 border border-tv-red/25 px-4 py-3.5 rounded-tv-md text-sm font-semibold">
                     <AlertTriangle className="w-5 h-5" />
-                    <span>Failed to save.</span>
+                    <span>Failed to save configurations.</span>
                   </div>
                 )}
               </div>
@@ -449,121 +478,117 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* TAB 2: HISTORICAL IMPORT */}
-        {activeTab === 'import' && (
-          <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-8 backdrop-blur-xl shadow-2xl">
-            <form onSubmit={handleImport} className="space-y-6">
+        {/* TAB 2: APPLICATION SETTINGS */}
+        {activeTab === 'app' && (
+          <div className="bg-tv-bg-secondary border border-tv-border rounded-tv-xl p-8 backdrop-blur-xl shadow-2xl">
+            <form onSubmit={handleSaveAppSettings} className="space-y-6">
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* Target Symbol */}
-                <div className="space-y-2">
-                  <label htmlFor="csv-symbol" className="block text-sm font-semibold text-slate-400">
-                    Import to Symbol
+                {/* Storage path */}
+                <div className="space-y-2 md:col-span-2">
+                  <label htmlFor="data-folder-path" className="block text-sm font-semibold text-tv-text-muted">
+                    DuckDB Database Storage Folder Path
                   </label>
                   <input
-                    id="csv-symbol"
+                    id="data-folder-path"
                     type="text"
-                    value={csvSymbol}
-                    onChange={(e) => setCsvSymbol(e.target.value.toUpperCase())}
-                    placeholder="e.g. XAUUSD or BTCUSD"
+                    value={dataFolderPath}
+                    onChange={(e) => setDataFolderPath(e.target.value)}
+                    placeholder="e.g. /home/ajinkya/projects/TestsGithub/16_july/db"
                     required
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-650 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
                   />
                 </div>
 
-                {/* Resolution */}
+                {/* Default timeframe */}
                 <div className="space-y-2">
-                  <label htmlFor="csv-resolution" className="block text-sm font-semibold text-slate-400">
-                    Historical Resolution
+                  <label htmlFor="default-timeframe" className="block text-sm font-semibold text-tv-text-muted">
+                    Default Active Timeframe
                   </label>
                   <select
-                    id="csv-resolution"
-                    value={csvResolution}
-                    onChange={(e) => setCsvResolution(e.target.value)}
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    id="default-timeframe"
+                    value={defaultTimeframe}
+                    onChange={(e) => setDefaultTimeframe(e.target.value)}
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
                   >
-                    <option value="1m">1 Minute (Intraday)</option>
+                    <option value="1m">1 Minute</option>
+                    <option value="5m">5 Minutes</option>
+                    <option value="15m">15 Minutes</option>
+                    <option value="1h">1 Hour</option>
+                    <option value="4h">4 Hours</option>
                     <option value="1D">Daily (1D)</option>
                     <option value="1W">Weekly (1W)</option>
                   </select>
                 </div>
 
-                {/* File Format */}
+                {/* Default risk % */}
                 <div className="space-y-2">
-                  <label htmlFor="csv-format" className="block text-sm font-semibold text-slate-400">
-                    CSV Format File Schema
+                  <label htmlFor="default-risk-pct" className="block text-sm font-semibold text-tv-text-muted">
+                    Default Backtesting Risk Percentage (%)
+                  </label>
+                  <input
+                    id="default-risk-pct"
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max="100"
+                    value={defaultRiskPct}
+                    onChange={(e) => setDefaultRiskPct(Number(e.target.value))}
+                    required
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
+                  />
+                </div>
+
+                {/* UI theme toggle */}
+                <div className="space-y-2">
+                  <label htmlFor="app-theme" className="block text-sm font-semibold text-tv-text-muted">
+                    Default UI Theme
                   </label>
                   <select
-                    id="csv-format"
-                    value={csvFormat}
-                    onChange={(e) => setCsvFormat(e.target.value)}
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    id="app-theme"
+                    value={appTheme}
+                    onChange={(e) => setAppTheme(e.target.value)}
+                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
                   >
-                    <option value="mt4">MT4 Tab-separated (&lt;DATE&gt; &lt;TIME&gt;)</option>
-                    <option value="standard">Standard CSV (time,open,high,low,close)</option>
+                    <option value="dark">Dark Slate Mode</option>
+                    <option value="light">Light Gray Mode</option>
                   </select>
                 </div>
 
               </div>
 
-              {/* Drag and Drop Area */}
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-400">Select Market Data File</label>
-                <div className="border-2 border-dashed border-slate-800 hover:border-slate-700 bg-slate-950/40 rounded-2xl p-8 text-center transition-all relative flex flex-col items-center justify-center min-h-[180px]">
-                  <UploadCloud className="w-12 h-12 text-slate-500 mb-3" />
-                  {selectedFile ? (
-                    <div>
-                      <p className="text-emerald-400 font-semibold">{selectedFile.name}</p>
-                      <p className="text-xs text-slate-500 font-mono mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-slate-350 font-semibold">Click to browse or drop file here</p>
-                      <p className="text-xs text-slate-500 mt-1">Supports standard .csv, .txt, or MT4 exports</p>
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    id="csv-file-input"
-                    accept=".csv,.txt,.tab"
-                    onChange={(e) => setSelectedFile(e.target.files ? e.target.files[0] : null)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              {/* Action Importer Button */}
+              {/* Save Button */}
               <div className="pt-4 flex items-center justify-between gap-4">
                 <button
                   type="submit"
-                  disabled={isImporting}
-                  className="flex-1 max-w-xs bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold py-4 rounded-xl transition-all hover:scale-105 flex items-center justify-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
+                  disabled={isSavingApp}
+                  className="flex-1 max-w-xs bg-tv-brand hover:bg-tv-brand-hover text-tv-text-primary font-bold py-4 rounded-tv-sm transition-all hover:scale-105 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-tv-brand/10 disabled:opacity-50"
                 >
-                  {isImporting ? (
+                  {isSavingApp ? (
                     <>
                       <RefreshCw className="w-5 h-5 animate-spin" />
-                      Importing Records...
+                      Saving Settings...
                     </>
                   ) : (
                     <>
-                      <Database className="w-5 h-5" />
-                      Run CSV Data Import
+                      <Save className="w-5 h-5" />
+                      Save Application Settings
                     </>
                   )}
                 </button>
 
-                {/* Status Banners */}
-                {importStatus === 'success' && (
-                  <div className="flex-1 max-w-md flex items-center gap-2 text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/25 px-4 py-3.5 rounded-xl text-sm">
-                    <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-                    <span>{importMessage}</span>
+                {/* Status Banner */}
+                {saveAppStatus === 'success' && (
+                  <div className="flex items-center gap-2 text-tv-green bg-tv-green/10 border border-tv-green/25 px-4 py-3.5 rounded-tv-md text-sm font-semibold">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span>Application settings updated!</span>
                   </div>
                 )}
-                {importStatus === 'error' && (
-                  <div className="flex-1 max-w-md flex items-center gap-2 text-rose-400 font-semibold bg-rose-500/10 border border-rose-500/25 px-4 py-3.5 rounded-xl text-sm">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                    <span>{importMessage}</span>
+                {saveAppStatus === 'error' && (
+                  <div className="flex items-center gap-2 text-tv-red bg-tv-red/10 border border-tv-red/25 px-4 py-3.5 rounded-tv-md text-sm font-semibold">
+                    <AlertTriangle className="w-5 h-5" />
+                    <span>Failed to save settings.</span>
                   </div>
                 )}
               </div>
