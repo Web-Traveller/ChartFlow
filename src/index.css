@@ -18,20 +18,3 @@ body,
     @apply bg-tv-bg-primary text-tv-text-primary antialiased font-tv;
   }
 }
-
-/* App Shell modifications to hide page-internal sidebars and flatten hierarchy */
-.hide-internal-sidebar aside {
-  display: none !important;
-}
-
-.hide-internal-sidebar > div {
-  background: transparent !important;
-  background-image: none !important;
-  min-height: unset !important;
-}
-
-.hide-internal-sidebar main {
-  max-width: 100% !important;
-  padding-left: var(--spacing-xl) !important;
-  padding-right: var(--spacing-xl) !important;
-}

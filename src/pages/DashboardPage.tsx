@@ -1,358 +1,320 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { CandlestickChart, Play, Trash2, Calendar, ShieldCheck, Compass, AlertCircle, Plus, Terminal } from 'lucide-react'
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useSession } from "../context/SessionContext";
+import {
+  CandlestickChart,
+  Database,
+  Calendar,
+  Terminal,
+  Settings,
+  Upload,
+  Activity,
+  ArrowRight,
+  ShieldCheck,
+  Cpu
+} from "lucide-react";
 
 interface Session {
-  id: string
-  name: string
-  symbol: string
-  all_instruments: boolean
-  all_time: boolean
-  time_start: string
-  time_end: string
-  created_at: number
+  id: string;
+  name: string;
+  symbol: string;
+  all_instruments: boolean;
+  all_time: boolean;
+  time_start: string;
+  time_end: string;
+  created_at: number;
 }
 
-interface SymbolSetting {
-  name: string
-  description: string
-  exchange: string
+interface LogEntry {
+  level: string;
+  timestamp: string;
 }
 
 export default function DashboardPage() {
-  const [sessions, setSessions] = useState<{ [key: string]: Session }>({})
-  const [symbols, setSymbols] = useState<{ [key: string]: SymbolSetting }>({})
-  
-  // Form fields
-  const [name, setName] = useState('')
-  const [symbol, setSymbol] = useState('XAUUSD')
-  const [allInstruments, setAllInstruments] = useState(false)
-  const [allTime, setAllTime] = useState(true)
-  const [timeStart, setTimeStart] = useState('')
-  const [timeEnd, setTimeEnd] = useState('')
-  
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
-  const [message, setMessage] = useState('')
+  const { sessionId: activeSessionId } = useSession();
+  const [sessions, setSessions] = useState<{ [key: string]: Session }>({});
+  const [sessionsCount, setSessionsCount] = useState(0);
+  const [symbolsCount, setSymbolsCount] = useState(0);
+  const [dbPath, setDbPath] = useState("");
+  const [errorCount, setErrorCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load sessions
-    fetch('http://localhost:8000/1.1/sessions')
-      .then(res => res.json())
-      .then(data => setSessions(data))
-      .catch(err => console.error('Failed to load sessions:', err))
-
-    // Load symbols to list options
-    fetch('http://localhost:8000/1.1/symbol_settings')
-      .then(res => res.json())
-      .then(data => setSymbols(data))
-      .catch(err => console.error('Failed to load symbols:', err))
-  }, [])
-
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault()
-    setStatus('loading')
-    setMessage('')
-
-    // Form validation
-    if (!name.strip()) {
-      setStatus('error')
-      setMessage('Session name is required')
-      return
-    }
-
-    const payload = {
-      name,
-      symbol,
-      all_instruments: allInstruments,
-      all_time: allTime,
-      time_start: allTime ? '' : timeStart,
-      time_end: allTime ? '' : timeEnd
-    }
-
-    fetch('http://localhost:8000/1.1/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'ok') {
-          setSessions(prev => ({ ...prev, [data.session.id]: data.session }))
-          setStatus('success')
-          setMessage('Session created successfully!')
-          setName('')
-        } else {
-          setStatus('error')
-          setMessage(data.message || 'Validation failed.')
-        }
+    Promise.all([
+      fetch("http://localhost:8000/1.1/sessions").then((r) => r.json()),
+      fetch("http://localhost:8000/1.1/app_settings").then((r) => r.json()),
+      fetch("http://localhost:8000/1.1/symbol_settings").then((r) => r.json()),
+      fetch("http://localhost:8000/1.1/logs?limit=500").then((r) => r.json()),
+    ])
+      .then(([sessionsData, settings, symbols, logs]) => {
+        setSessions(sessionsData);
+        setSessionsCount(Object.keys(sessionsData).length);
+        setSymbolsCount(Object.keys(symbols).length);
+        setDbPath(settings.data_folder_path || "db");
+        setErrorCount(
+          logs.filter(
+            (l: LogEntry) => l.level === "error" || l.level === "warning",
+          ).length,
+        );
       })
-      .catch(() => {
-        setStatus('error')
-        setMessage('Network error while creating session.')
-      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center text-text-muted font-mono text-xs">
+        <Activity className="w-4 h-4 animate-spin text-accent mr-2" />
+        LOADING WORKSPACE TERMINAL...
+      </div>
+    );
   }
 
-  const handleDelete = (id: string) => {
-    if (!confirm('Are you sure you want to delete this session?')) return
-
-    fetch(`http://localhost:8000/1.1/sessions/${id}`, { method: 'DELETE' })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'ok') {
-          setSessions(prev => {
-            const next = { ...prev }
-            delete next[id]
-            return next
-          })
-        }
-      })
-      .catch(err => console.error('Error deleting session:', err))
-  }
-
-  // Symbol helper formatting
-  const getSymbolLabel = (symName: string) => {
-    const s = symbols[symName]
-    return s ? `${symName} - ${s.description} (${s.exchange})` : symName
-  }
+  // Determine active sessions display list (sorted by creation date)
+  const sessionsList = Object.values(sessions).sort((a, b) => b.created_at - a.created_at);
 
   return (
-    <div className="min-h-screen bg-tv-bg-primary text-tv-text-primary font-tv flex">
-      {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-tv-border bg-tv-bg-secondary/50 backdrop-blur flex flex-col p-6">
-        <div className="flex items-center gap-2 mb-10">
-          <CandlestickChart className="w-8 h-8 text-tv-brand" />
-          <span className="text-xl font-bold text-tv-text-primary">
-            ChartFlow
-          </span>
+    <div className="p-4 space-y-4 max-w-7xl mx-auto font-sans">
+      
+      {/* Header */}
+      <section className="flex items-center justify-between pb-1 border-b border-border-subtle/50">
+        <div>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="meta-text mt-0.5">Trading environment overview</p>
         </div>
-        <nav className="flex-1 space-y-2">
-          <Link to="/" className="flex items-center gap-3 bg-tv-bg-tertiary border border-tv-border text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
-            <Compass className="w-5 h-5 text-tv-brand" />
-            Dashboard
-          </Link>
-          <Link to="/chart" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
-            <CandlestickChart className="w-5 h-5" />
-            Launch Chart
-          </Link>
-          <Link to="/settings" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
-            <Plus className="w-5 h-5" />
-            Settings & Import
-          </Link>
-          <Link to="/logs" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
-            <Terminal className="w-5 h-5" />
-            App Logs
-          </Link>
-        </nav>
-      </aside>
+      </section>
 
-      {/* Main Workspace Area */}
-      <main className="flex-1 p-8 md:p-12 overflow-y-auto max-w-7xl">
-        <div className="mb-10">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 text-tv-text-primary leading-tight">
-            Workspace Dashboard
-          </h1>
-          <p className="text-tv-text-muted text-lg max-w-2xl">
-            Configure custom viewing scopes, constrain backtesting periods, and initialize standalone market sessions.
-          </p>
-        </div>
+      {/* Status Grid (4 Columns) */}
+      <section className="grid grid-cols-4 gap-3">
+        <MetricBox
+          title="Database"
+          value="ONLINE"
+          icon={Database}
+          status="good"
+        />
+        <MetricBox
+          title="Symbols"
+          value={symbolsCount}
+          icon={CandlestickChart}
+        />
+        <MetricBox
+          title="Sessions"
+          value={sessionsCount}
+          icon={Calendar}
+        />
+        <MetricBox
+          title="Alerts"
+          value={errorCount}
+          icon={Terminal}
+          status={errorCount > 0 ? "bad" : "good"}
+        />
+      </section>
 
-        {/* Dashboard grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Create Session Form */}
-          <div className="lg:col-span-1 bg-tv-bg-secondary border border-tv-border rounded-tv-xl p-6 shadow-2xl h-fit">
-            <h2 className="text-2xl font-bold mb-6 text-tv-text-primary">New Backtest Session</h2>
-            <form onSubmit={handleCreate} className="space-y-5">
-              
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-tv-text-muted">Session Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Gold Jan-July 2021"
-                  required
-                  className="w-full bg-tv-bg-primary/80 border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-tv-text-muted">Select Symbol</label>
-                <select
-                  value={symbol}
-                  onChange={(e) => setSymbol(e.target.value)}
-                  disabled={allInstruments}
-                  className="w-full bg-tv-bg-primary/80 border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors disabled:opacity-50"
-                >
-                  <option value="XAUUSD">{getSymbolLabel('XAUUSD')}</option>
-                  <option value="XAGUSD">{getSymbolLabel('XAGUSD')}</option>
-                  <option value="BTCUSD">{getSymbolLabel('BTCUSD')}</option>
-                  {Object.keys(symbols).filter(s => s !== 'XAUUSD' && s !== 'XAGUSD' && s !== 'BTCUSD').map(s => (
-                    <option key={s} value={s}>{getSymbolLabel(s)}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Options */}
-              <div className="space-y-3 pt-2">
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={allInstruments}
-                    onChange={(e) => setAllInstruments(e.target.checked)}
-                    className="w-5 h-5 rounded border-tv-border bg-tv-bg-primary text-tv-brand focus:ring-tv-brand"
-                  />
-                  <span className="text-sm text-tv-text-primary font-medium">All Instruments</span>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={allTime}
-                    onChange={(e) => setAllTime(e.target.checked)}
-                    className="w-5 h-5 rounded border-tv-border bg-tv-bg-primary text-tv-brand focus:ring-tv-brand"
-                  />
-                  <span className="text-sm text-tv-text-primary font-medium">All Available Timeframe</span>
-                </label>
-              </div>
-
-              {/* Date pickers (only shown if not allTime) */}
-              {!allTime && (
-                <div className="space-y-4 pt-2 border-t border-tv-border/50">
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-tv-text-muted">Start Date</label>
-                    <div className="relative">
-                      <input
-                        type="date"
-                        value={timeStart}
-                        onChange={(e) => setTimeStart(e.target.value)}
-                        required
-                        className="w-full bg-tv-bg-primary/80 border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-tv-text-muted">End Date</label>
-                    <div className="relative">
-                      <input
-                        type="date"
-                        value={timeEnd}
-                        onChange={(e) => setTimeEnd(e.target.value)}
-                        required
-                        className="w-full bg-tv-bg-primary/80 border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Status Indicator */}
-              {status === 'success' && (
-                <div className="flex items-center gap-2 text-tv-green bg-tv-green/10 border border-tv-green/25 p-3.5 rounded-tv-md text-sm">
-                  <ShieldCheck className="w-5 h-5 flex-shrink-0" />
-                  <span>{message}</span>
-                </div>
-              )}
-              {status === 'error' && (
-                <div className="flex items-center gap-2 text-tv-red bg-tv-red/10 border border-tv-red/25 p-3.5 rounded-tv-md text-sm">
-                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                  <span>{message}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={status === 'loading'}
-                className="w-full bg-tv-brand hover:bg-tv-brand-hover text-tv-text-primary font-bold py-4 rounded-tv-md transition-all hover:scale-[1.02] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                Create Session
-              </button>
-
-            </form>
+      {/* Main Workspace Layout Split */}
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        
+        {/* Active Sessions - 2 Columns wide */}
+        <div className="lg:col-span-2 panel flex flex-col min-h-[220px]">
+          <div className="flex items-center justify-between mb-3 border-b border-border-subtle/50 pb-2">
+            <h2 className="section-title flex items-center gap-1.5">
+              <Activity className="w-4 h-4 text-accent" />
+              Active Viewing Sessions
+            </h2>
+            <Link
+              to="/sessions"
+              className="text-[12px] text-accent hover:text-accent-hover flex items-center gap-1 transition-colors"
+            >
+              Configure
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
 
-          {/* Active Sessions List */}
-          <div className="lg:col-span-2 bg-tv-bg-secondary border border-tv-border rounded-tv-xl p-6 shadow-2xl flex flex-col min-h-[400px]">
-            <h2 className="text-2xl font-bold mb-6 text-tv-text-primary">Active Viewing Sessions</h2>
-            
-            {Object.keys(sessions).length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-12 text-tv-text-muted">
-                <Calendar className="w-12 h-12 mb-4 text-tv-text-muted/60" />
-                <p className="text-lg">No active viewing sessions found.</p>
-                <p className="text-sm">Create a session using the form on the left to start backtesting.</p>
+          <div className="flex-1 overflow-x-auto">
+            {sessionsCount === 0 ? (
+              <div className="h-full min-h-[120px] flex flex-col items-center justify-center text-xs text-text-muted border border-dashed border-border-subtle rounded-md bg-bg-base/20">
+                <span>No active viewing sessions found.</span>
+                <Link to="/sessions" className="text-accent hover:underline mt-1">Create one here</Link>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-tv-border text-tv-text-muted text-sm font-semibold">
-                      <th className="pb-4 pr-4">Session Info</th>
-                      <th className="pb-4 pr-4">Scope</th>
-                      <th className="pb-4 pr-4">Date Range</th>
-                      <th className="pb-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-tv-border/50">
-                    {Object.values(sessions)
-                      .sort((a, b) => b.created_at - a.created_at)
-                      .map((sess) => (
-                        <tr key={sess.id} className="text-tv-text-primary hover:bg-tv-bg-tertiary/30 transition-colors">
-                          <td className="py-4 pr-4">
-                            <div className="font-semibold text-tv-text-primary">{sess.name}</div>
-                            <div className="text-xs text-tv-text-muted font-mono">ID: {sess.id}</div>
-                          </td>
-                          <td className="py-4 pr-4">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-tv-full text-xs font-semibold bg-tv-brand/10 text-tv-brand border border-tv-brand/20">
-                              {sess.all_instruments ? 'All Symbols' : sess.symbol}
-                            </span>
-                          </td>
-                          <td className="py-4 pr-4 text-sm font-mono text-tv-text-muted">
-                            {sess.all_time ? (
-                              <span className="text-tv-text-muted/60">All available data</span>
-                            ) : (
-                              `${sess.time_start} to ${sess.time_end}`
-                            )}
-                          </td>
-                          <td className="py-4 text-right">
-                            <div className="flex items-center justify-end gap-3">
-                              <a
-                                href={`/chart?session=${sess.id}`}
-                                className="bg-tv-brand hover:bg-tv-brand-hover text-tv-text-primary font-semibold px-4.5 py-2 rounded-tv-sm transition-all text-sm flex items-center gap-1.5 hover:scale-105"
-                              >
-                                <Play className="w-4 h-4 fill-tv-text-primary text-tv-text-primary" />
-                                Launch
-                              </a>
-                              <button
-                                onClick={() => handleDelete(sess.id)}
-                                className="bg-tv-bg-primary border border-tv-border hover:border-tv-red/30 text-tv-text-muted hover:text-tv-red p-2.5 rounded-tv-sm transition-all"
-                                title="Delete Session"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-border-subtle text-text-secondary text-[11px] uppercase font-semibold">
+                    <th className="py-2 px-2">Name</th>
+                    <th className="py-2 px-2">Symbol</th>
+                    <th className="py-2 px-2">Status</th>
+                    <th className="py-2 px-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle/30">
+                  {sessionsList.map((sess) => {
+                    const isRunning = sess.id === activeSessionId;
+                    return (
+                      <tr key={sess.id} className="compact-row text-xs hover:bg-bg-surface-elevated/45 transition-colors">
+                        <td className="py-2 px-2 font-medium text-text-primary">{sess.name}</td>
+                        <td className="py-2 px-2 font-mono">
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-bg-base border border-border-subtle text-[10px] text-accent font-semibold">
+                            {sess.symbol}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2">
+                          <span className={`status-badge ${isRunning ? 'running' : 'paused'} py-0 px-2 text-[10px] h-5`}>
+                            {isRunning ? 'RUNNING' : 'PAUSED'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-right">
+                          <Link
+                            to={`/chart?session=${sess.id}`}
+                            className="inline-flex items-center justify-center h-7 px-3 bg-accent hover:bg-accent-hover text-black text-xs font-bold rounded transition-all cursor-pointer"
+                          >
+                            Open
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
-      </main>
+
+        {/* Quick Actions Panel - 1 Column wide */}
+        <div className="panel flex flex-col">
+          <div className="flex items-center justify-between mb-3 border-b border-border-subtle/50 pb-2">
+            <h2 className="section-title flex items-center gap-1.5">
+              <Cpu className="w-4 h-4 text-accent" />
+              Quick Actions
+            </h2>
+          </div>
+
+          <div className="flex-1 flex flex-col gap-2 justify-center">
+            <Link
+              to={activeSessionId ? `/chart?session=${activeSessionId}` : "/chart"}
+              className="flex items-center justify-between px-3 py-2 rounded bg-bg-base border border-border-subtle hover:border-accent hover:bg-bg-surface-elevated text-xs font-semibold text-text-primary transition-all group"
+            >
+              <span className="flex items-center gap-2">
+                <CandlestickChart className="w-4 h-4 text-text-secondary group-hover:text-accent" />
+                Open Chart
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-text-muted group-hover:text-text-primary" />
+            </Link>
+
+            <Link
+              to="/sessions"
+              className="flex items-center justify-between px-3 py-2 rounded bg-bg-base border border-border-subtle hover:border-accent hover:bg-bg-surface-elevated text-xs font-semibold text-text-primary transition-all group"
+            >
+              <span className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-text-secondary group-hover:text-accent" />
+                New Session
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-text-muted group-hover:text-text-primary" />
+            </Link>
+
+            <Link
+              to="/import"
+              className="flex items-center justify-between px-3 py-2 rounded bg-bg-base border border-border-subtle hover:border-accent hover:bg-bg-surface-elevated text-xs font-semibold text-text-primary transition-all group"
+            >
+              <span className="flex items-center gap-2">
+                <Upload className="w-4 h-4 text-text-secondary group-hover:text-accent" />
+                Import Data
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-text-muted group-hover:text-text-primary" />
+            </Link>
+
+            <Link
+              to="/settings?tab=app"
+              className="flex items-center justify-between px-3 py-2 rounded bg-bg-base border border-border-subtle hover:border-accent hover:bg-bg-surface-elevated text-xs font-semibold text-text-primary transition-all group"
+            >
+              <span className="flex items-center gap-2">
+                <Settings className="w-4 h-4 text-text-secondary group-hover:text-accent" />
+                Settings
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-text-muted group-hover:text-text-primary" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* System Information footer row */}
+      <section className="panel">
+        <div className="flex items-center justify-between mb-3 border-b border-border-subtle/50 pb-2">
+          <h2 className="section-title flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-accent" />
+            System Information
+          </h2>
+          <span className="text-[11px] text-bull font-mono uppercase tracking-wider flex items-center gap-1.5">
+            <span className="pulse-indicator" />
+            Terminal Connected
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
+          <div>
+            <span className="text-text-muted font-medium">Database Path</span>
+            <p className="mt-1 font-mono text-text-primary bg-bg-base border border-border-subtle px-2.5 py-1.5 rounded truncate select-all" title={dbPath}>
+              {dbPath}
+            </p>
+          </div>
+
+          <div>
+            <span className="text-text-muted font-medium">Storage Status</span>
+            <p className="mt-1 font-mono text-text-primary bg-bg-base border border-border-subtle px-2.5 py-1.5 rounded flex items-center justify-between">
+              <span>LOCAL DUCKDB SQLITE</span>
+              <span className="text-bull text-[10px] font-bold">ACTIVE</span>
+            </p>
+          </div>
+
+          <div>
+            <span className="text-text-muted font-medium">Application Status</span>
+            <p className="mt-1 font-mono text-text-primary bg-bg-base border border-border-subtle px-2.5 py-1.5 rounded flex items-center justify-between">
+              <span>READY / DIAGNOSTICS OK</span>
+              <span className="text-accent text-[10px] font-bold">
+                {errorCount === 0 ? "0 ERRORS" : `${errorCount} WARNINGS`}
+              </span>
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
-  )
+  );
 }
 
-// Simple helper polyfill for strings strip
-if (!String.prototype.strip) {
-  String.prototype.strip = function() {
-    return this.replace(/^\s+|\s+$/g, '');
-  };
-}
-
-declare global {
-  interface String {
-    strip(): string;
-  }
+/* Compact Dashboard Metric Module */
+function MetricBox({
+  title,
+  value,
+  icon: Icon,
+  status,
+}: {
+  title: string;
+  value: string | number;
+  icon: any;
+  status?: "good" | "bad";
+}) {
+  return (
+    <div className="bg-bg-surface border border-border-subtle rounded-lg px-3 py-2.5 flex items-center justify-between">
+      <div className="space-y-1">
+        <span className="text-[11px] text-text-secondary uppercase font-semibold tracking-wider">
+          {title}
+        </span>
+        <div
+          className={`text-lg font-bold font-mono tracking-tight
+            ${status === "good" ? "text-bull" : ""}
+            ${status === "bad" ? "text-bear" : ""}
+            ${!status ? "text-text-primary" : ""}
+          `}
+        >
+          {value}
+        </div>
+      </div>
+      <div className="w-8 h-8 rounded bg-bg-base border border-border-subtle/55 flex items-center justify-center">
+        <Icon
+          className={`w-4 h-4
+            ${status === "bad" ? "text-bear" : ""}
+            ${status === "good" ? "text-bull" : "text-accent"}
+          `}
+        />
+      </div>
+    </div>
+  );
 }

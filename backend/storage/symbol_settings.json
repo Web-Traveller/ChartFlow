@@ -2,12 +2,23 @@
   "XAUUSD": {
     "name": "XAUUSD",
     "ticker": "XAUUSD",
-    "description": "Gold / U.S. Dollar",
+    "description": "Gold Spot",
     "type": "commodity",
     "exchange": "FOREX",
     "session": "24x7",
     "timezone": "Etc/UTC",
     "pricescale": 100,
     "symbol_logo": "/logos/gold.svg"
+  },
+  "5YESES": {
+    "name": "5YESES",
+    "ticker": "5YESES",
+    "description": "5YESES - Local DuckDB",
+    "type": "stock",
+    "exchange": "FOREX",
+    "session": "24x7",
+    "timezone": "Etc/UTC",
+    "pricescale": 100000,
+    "symbol_logo": "/logos/default.png"
   }
 }

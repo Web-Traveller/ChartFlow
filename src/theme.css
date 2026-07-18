@@ -1,33 +1,365 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
 :root {
-  /* Colors - TradingView Dark Palette */
-  --tv-bg-primary: #131722;
-  --tv-bg-secondary: #1c2030;
-  --tv-bg-tertiary: #242838;
-  --tv-border: #2a2e39;
-  --tv-text-primary: #d1d4dc;
-  --tv-text-muted: #868993;
-  --tv-brand: #2962ff;
-  --tv-brand-hover: #1e4bd8;
-  --tv-green: #089981;
-  --tv-green-hover: #067d6a;
-  --tv-red: #f23645;
-  --tv-red-hover: #d22d3a;
+  /* =====================================================
+     CORE COLORS
+     ===================================================== */
+  --tv-bg-base: #090A0C;
+  --tv-bg-surface: #101214;
+  --tv-bg-elevated: #15181C;
 
-  /* Spacing Scale */
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-  --spacing-2xl: 3rem;
+  /* Tailwind aliases */
+  --tv-bg-primary: var(--tv-bg-base);
+  --tv-bg-secondary: var(--tv-bg-surface);
+  --tv-bg-tertiary: var(--tv-bg-elevated);
 
-  /* Border Radius Scale */
-  --radius-sm: 4px;
+  /* Borders */
+  --tv-border: rgba(255, 255, 255, 0.08);
+  --tv-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* =====================================================
+     TEXT SYSTEM
+     ===================================================== */
+  --tv-text-primary: #E6E8EB;
+  --tv-text-secondary: #8B929A;
+  --tv-text-muted: #5F6369;
+
+  /* =====================================================
+     BRAND & ACCENTS
+     ===================================================== */
+  --tv-accent: #F59E0B;
+  --tv-accent-hover: #D97706;
+  --tv-accent-soft: rgba(245, 158, 11, 0.08);
+
+  --tv-brand: var(--tv-accent);
+  --tv-brand-hover: var(--tv-accent-hover);
+
+  /* =====================================================
+     MARKET COLORS
+     ===================================================== */
+  --tv-bull: #22C55E;
+  --tv-bull-soft: rgba(34, 197, 94, 0.08);
+  --tv-bear: #EF4444;
+  --tv-bear-soft: rgba(239, 68, 68, 0.08);
+
+  --tv-green: var(--tv-bull);
+  --tv-green-hover: #16A34A;
+  --tv-red: var(--tv-bear);
+  --tv-red-hover: #DC2626;
+
+  /* =====================================================
+     RADIUS (Compact: 6px - 10px, 8px default)
+     ===================================================== */
+  --radius-sm: 6px;
   --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
 
-  /* Font Stack */
-  --font-stack: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
+  /* =====================================================
+     SPACING (Dense)
+     ===================================================== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Tailwind mappings */
+  --spacing-xs: var(--space-1);
+  --spacing-sm: var(--space-2);
+  --spacing-md: var(--space-3);
+  --spacing-lg: var(--space-4);
+  --spacing-xl: var(--space-5);
+  --spacing-2xl: var(--space-6);
+
+  /* =====================================================
+     TYPOGRAPHY
+     ===================================================== */
+  --font-main: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-stack: var(--font-main);
+}
+
+/* =====================================================
+   GLOBAL RESET
+   ===================================================== */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--tv-bg-base);
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--tv-bg-base);
+  color: var(--tv-text-primary);
+  font-family: var(--font-main);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--tv-bg-base);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--tv-border-strong);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--tv-text-muted);
+}
+
+/* =====================================================
+   COLOR BRIDGE
+   ===================================================== */
+.bg-bg-base {
+  background-color: var(--tv-bg-base);
+}
+
+.bg-bg-surface {
+  background-color: var(--tv-bg-surface);
+}
+
+.bg-bg-surface-elevated {
+  background-color: var(--tv-bg-elevated);
+}
+
+.text-text-primary {
+  color: var(--tv-text-primary);
+}
+
+.text-text-secondary {
+  color: var(--tv-text-secondary);
+}
+
+.text-text-muted {
+  color: var(--tv-text-muted);
+}
+
+.text-accent {
+  color: var(--tv-accent);
+}
+
+.text-bull {
+  color: var(--tv-bull);
+}
+
+.text-bear {
+  color: var(--tv-bear);
+}
+
+.border-border-subtle {
+  border-color: var(--tv-border);
+}
+
+.border-border-strong {
+  border-color: var(--tv-border-strong);
+}
+
+/* =====================================================
+   COMPACT WORKSPACE SYSTEM
+   ===================================================== */
+.panel {
+  background-color: var(--tv-bg-surface);
+  border: 1px solid var(--tv-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+/* Typography elements */
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--tv-text-primary);
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tv-text-primary);
+}
+
+.meta-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tv-text-muted);
+}
+
+/* Forms & Inputs */
+input, select, textarea {
+  font-size: 13px !important;
+  height: 32px;
+  background-color: var(--tv-bg-base) !important;
+  border: 1px solid var(--tv-border) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--tv-text-primary) !important;
+  padding: 0 10px !important;
+  transition: border-color 0.15s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--tv-accent) !important;
+  outline: none !important;
+}
+
+/* Button & Link-Button defaults */
+button, .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  background-color: var(--tv-bg-elevated);
+  border: 1px solid var(--tv-border);
+  border-radius: var(--radius-sm);
+  color: var(--tv-text-primary);
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+button:hover, .btn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--tv-border-strong);
+}
+
+button:active, .btn:active {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+button:disabled, .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Background Color Utilities for overrides */
+.bg-accent {
+  background-color: var(--tv-accent) !important;
+  color: #090A0C !important;
+  border-color: transparent !important;
+}
+.bg-accent:hover, .hover\:bg-accent-hover:hover {
+  background-color: var(--tv-accent-hover) !important;
+  color: #090A0C !important;
+}
+
+.bg-bull {
+  background-color: var(--tv-bull) !important;
+  color: #090A0C !important;
+  border-color: transparent !important;
+}
+.bg-bull:hover {
+  background-color: var(--tv-green-hover) !important;
+}
+
+.bg-bear {
+  background-color: var(--tv-bear) !important;
+  color: #E6E8EB !important;
+  border-color: transparent !important;
+}
+.bg-bear:hover {
+  background-color: var(--tv-red-hover) !important;
+}
+
+.bg-bg-surface-elevated {
+  background-color: var(--tv-bg-elevated) !important;
+}
+
+.bg-bg-surface {
+  background-color: var(--tv-bg-surface) !important;
+}
+
+.bg-bg-base {
+  background-color: var(--tv-bg-base) !important;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tv-text-secondary);
+  border-bottom: 1px solid var(--tv-border);
+  padding: 8px 12px;
+}
+
+td {
+  font-size: 13px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+tr.compact-row {
+  height: 36px;
+}
+
+tr.compact-row:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.status-badge.running {
+  background-color: var(--tv-bull-soft);
+  color: var(--tv-bull);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.status-badge.paused {
+  background-color: rgba(245, 158, 11, 0.08);
+  color: var(--tv-accent);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.status-badge.offline {
+  background-color: var(--tv-bear-soft);
+  color: var(--tv-bear);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Minimal subtle animations */
+.pulse-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--tv-bull);
+  animation: pulse-light 2s infinite ease-in-out;
+}
+
+@keyframes pulse-light {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
 }

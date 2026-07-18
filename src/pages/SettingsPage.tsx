@@ -1,142 +1,99 @@
-import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { CandlestickChart, Save, CheckCircle2, AlertTriangle, RefreshCw, Compass, Plus, Terminal } from 'lucide-react'
-
-interface SymbolConfig {
-  name: string
-  ticker: string
-  description: string
-  type: string
-  exchange: string
-  session: string
-  timezone: string
-  pricescale: number
-  symbol_logo: string
-}
+import { useState, useEffect } from 'react';
+import { Save, CheckCircle2, AlertTriangle, RefreshCw, X, Settings2 } from 'lucide-react';
+import LogsPage from './LogsPage';
 
 export default function SettingsPage() {
   // Tab control
-  const [activeTab, setActiveTab] = useState<'symbol' | 'app'>(() => {
-    const params = new URLSearchParams(window.location.search)
-    const tabParam = params.get('tab')
-    return tabParam === 'app' ? 'app' : 'symbol'
-  })
+  const [activeTab, setActiveTab] = useState<'symbols' | 'app' | 'logs'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'app') return 'app';
+    if (tabParam === 'logs') return 'logs';
+    return 'symbols';
+  });
 
   // Listen to search changes (e.g. back buttons)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const tabParam = params.get('tab')
-    if (tabParam === 'app' || tabParam === 'symbol') {
-      setActiveTab(tabParam)
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'app' || tabParam === 'symbols' || tabParam === 'logs') {
+      setActiveTab(tabParam);
     }
-  }, [window.location.search])
+  }, [window.location.search]);
 
-  // Symbol Configuration states
-  const [configs, setConfigs] = useState<{ [key: string]: SymbolConfig }>({})
-  const [selectedSymbol, setSelectedSymbol] = useState('XAUUSD')
-  const [description, setDescription] = useState('')
-  const [type, setType] = useState('forex')
-  const [exchange, setExchange] = useState('FOREX')
-  const [session, setSession] = useState('24x7')
-  const [timezone, setTimezone] = useState('Etc/UTC')
-  const [priceScale, setPriceScale] = useState(100000)
-  const [logoUrl, setLogoUrl] = useState('/logos/gold.svg')
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  // Symbols Overview states
+  const [symbolsOverview, setSymbolsOverview] = useState<any[]>([]);
+  const [isLoadingSymbols, setIsLoadingSymbols] = useState(true);
+  const [editingSymbol, setEditingSymbol] = useState<any | null>(null);
+
+  // Symbol Configuration states (for the modal editor)
+  const [selectedSymbol, setSelectedSymbol] = useState('');
+  const [description, setDescription] = useState('');
+  const [type, setType] = useState('forex');
+  const [exchange, setExchange] = useState('FOREX');
+  const [session, setSession] = useState('24x7');
+  const [timezone, setTimezone] = useState('Etc/UTC');
+  const [priceScale, setPriceScale] = useState(100000);
+  const [logoUrl, setLogoUrl] = useState('/logos/default.png');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   // Application Settings states
-  const [dataFolderPath, setDataFolderPath] = useState('/home/ajinkya/projects/TestsGithub/16_july/db')
-  const [defaultRiskPct, setDefaultRiskPct] = useState(1.0)
-  const [defaultTimeframe, setDefaultTimeframe] = useState('1D')
-  const [appTheme, setAppTheme] = useState('dark')
-  const [isSavingApp, setIsSavingApp] = useState(false)
-  const [saveAppStatus, setSaveAppStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [dataFolderPath, setDataFolderPath] = useState('');
+  const [defaultRiskPct, setDefaultRiskPct] = useState(1.0);
+  const [defaultTimeframe, setDefaultTimeframe] = useState('1D');
+  const [appTheme, setAppTheme] = useState('dark');
+  const [isSavingApp, setIsSavingApp] = useState(false);
+  const [saveAppStatus, setSaveAppStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  useEffect(() => {
-    // Fetch symbol settings
-    fetch('http://localhost:8000/1.1/symbol_settings')
+  const fetchSymbolsOverview = () => {
+    setIsLoadingSymbols(true);
+    fetch('http://localhost:8000/1.1/symbols_overview')
       .then(res => res.json())
       .then(data => {
-        setConfigs(data)
-        const active = data[selectedSymbol]
-        if (active) {
-          loadSymbolConfig(active)
-        } else {
-          // Defaults for XAUUSD if not yet saved
-          setDescription('Gold / U.S. Dollar')
-          setType('forex')
-          setExchange('FOREX')
-          setSession('24x7')
-          setTimezone('Etc/UTC')
-          setPriceScale(100000)
-          setLogoUrl('/logos/gold.svg')
-        }
+        setSymbolsOverview(data);
+        setIsLoadingSymbols(false);
       })
-      .catch(err => console.error('Error fetching settings:', err))
+      .catch(err => {
+        console.error('Failed to load symbols overview:', err);
+        setIsLoadingSymbols(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchSymbolsOverview();
 
     // Fetch app settings
     fetch('http://localhost:8000/1.1/app_settings')
       .then(res => res.json())
       .then(data => {
         if (data) {
-          if (data.data_folder_path) setDataFolderPath(data.data_folder_path)
-          if (data.default_risk_pct !== undefined) setDefaultRiskPct(data.default_risk_pct)
-          if (data.default_timeframe) setDefaultTimeframe(data.default_timeframe)
-          if (data.theme) setAppTheme(data.theme)
+          if (data.data_folder_path) setDataFolderPath(data.data_folder_path);
+          if (data.default_risk_pct !== undefined) setDefaultRiskPct(data.default_risk_pct);
+          if (data.default_timeframe) setDefaultTimeframe(data.default_timeframe);
+          if (data.theme) setAppTheme(data.theme);
         }
       })
-      .catch(err => console.error('Error fetching app settings:', err))
-  }, [])
+      .catch(err => console.error('Error fetching app settings:', err));
+  }, []);
 
-  const loadSymbolConfig = (cfg: SymbolConfig) => {
-    setDescription(cfg.description || '')
-    setType(cfg.type || 'forex')
-    setExchange(cfg.exchange || 'FOREX')
-    setSession(cfg.session || '24x7')
-    setTimezone(cfg.timezone || 'Etc/UTC')
-    setPriceScale(cfg.pricescale || 100000)
-    setLogoUrl(cfg.symbol_logo || '/logos/default.png')
-  }
-
-  const handleSymbolChange = (sym: string) => {
-    setSelectedSymbol(sym)
-    const active = configs[sym]
-    if (active) {
-      loadSymbolConfig(active)
-    } else {
-      // Set sensible defaults for common other symbols if selected
-      if (sym === 'XAGUSD') {
-        setDescription('Silver / U.S. Dollar')
-        setType('commodity')
-        setExchange('FOREX')
-        setSession('24x7')
-        setTimezone('Etc/UTC')
-        setPriceScale(100)
-        setLogoUrl('/logos/silver.svg')
-      } else if (sym === 'BTCUSD') {
-        setDescription('Bitcoin / U.S. Dollar')
-        setType('crypto')
-        setExchange('FOREX')
-        setSession('24x7')
-        setTimezone('Etc/UTC')
-        setPriceScale(100)
-        setLogoUrl('/logos/XTVCBTC.svg')
-      } else {
-        setDescription(`${sym} – Local DuckDB`)
-        setType('forex')
-        setExchange('FOREX')
-        setSession('24x7')
-        setTimezone('Etc/UTC')
-        setPriceScale(100000)
-        setLogoUrl('/logos/default.png')
-      }
-    }
-  }
+  const startEditing = (sym: any) => {
+    setEditingSymbol(sym);
+    setSelectedSymbol(sym.symbol);
+    setDescription(sym.description || '');
+    setType(sym.type || 'forex');
+    setExchange(sym.exchange || 'FOREX');
+    setSession(sym.session || '24x7');
+    setTimezone(sym.timezone || 'Etc/UTC');
+    setPriceScale(sym.pricescale || 100000);
+    setLogoUrl(sym.symbol_logo || '/logos/default.png');
+    setSaveStatus('idle');
+  };
 
   const handleSaveSymbolSettings = (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSaving(true)
-    setSaveStatus('idle')
+    e.preventDefault();
+    setIsSaving(true);
+    setSaveStatus('idle');
 
     const payload = {
       [selectedSymbol]: {
@@ -150,7 +107,7 @@ export default function SettingsPage() {
         pricescale: Number(priceScale),
         symbol_logo: logoUrl
       }
-    }
+    };
 
     fetch('http://localhost:8000/1.1/symbol_settings', {
       method: 'POST',
@@ -162,32 +119,33 @@ export default function SettingsPage() {
       .then(res => res.json())
       .then(data => {
         if (data.status === 'ok') {
-          setConfigs(prev => ({ ...prev, ...payload }))
-          setSaveStatus('success')
+          setSaveStatus('success');
+          fetchSymbolsOverview();
+          setTimeout(() => setEditingSymbol(null), 1000);
         } else {
-          setSaveStatus('error')
+          setSaveStatus('error');
         }
       })
       .catch(() => {
-        setSaveStatus('error')
+        setSaveStatus('error');
       })
       .finally(() => {
-        setIsSaving(false)
-        setTimeout(() => setSaveStatus('idle'), 4000)
-      })
-  }
+        setIsSaving(false);
+        setTimeout(() => setSaveStatus('idle'), 4000);
+      });
+  };
 
   const handleSaveAppSettings = (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSavingApp(true)
-    setSaveAppStatus('idle')
+    e.preventDefault();
+    setIsSavingApp(true);
+    setSaveAppStatus('idle');
 
     const payload = {
       data_folder_path: dataFolderPath,
       default_risk_pct: Number(defaultRiskPct),
       default_timeframe: defaultTimeframe,
       theme: appTheme
-    }
+    };
 
     fetch('http://localhost:8000/1.1/app_settings', {
       method: 'POST',
@@ -199,147 +157,359 @@ export default function SettingsPage() {
       .then(res => res.json())
       .then(data => {
         if (data.status === 'ok') {
-          setSaveAppStatus('success')
+          setSaveAppStatus('success');
         } else {
-          setSaveAppStatus('error')
+          setSaveAppStatus('error');
         }
       })
       .catch(() => {
-        setSaveAppStatus('error')
+        setSaveAppStatus('error');
       })
       .finally(() => {
-        setIsSavingApp(false)
-        setTimeout(() => setSaveAppStatus('idle'), 4000)
-      })
-  }
+        setIsSavingApp(false);
+        setTimeout(() => setSaveAppStatus('idle'), 4000);
+      });
+  };
 
   return (
-    <div className="min-h-screen bg-tv-bg-primary text-tv-text-primary font-tv flex">
-      {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-tv-border bg-tv-bg-secondary/50 backdrop-blur flex flex-col p-6">
-        <div className="flex items-center gap-2 mb-10">
-          <CandlestickChart className="w-8 h-8 text-tv-brand" />
-          <span className="text-xl font-bold text-tv-text-primary">
-            ChartFlow
-          </span>
-        </div>
-        <nav className="flex-1 space-y-2">
-          <Link to="/" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
-            <Compass className="w-5 h-5" />
-            Dashboard
-          </Link>
-          <Link to="/chart" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
-            <CandlestickChart className="w-5 h-5" />
-            Launch Chart
-          </Link>
-          <Link to="/settings" className="flex items-center gap-3 bg-tv-bg-tertiary border border-tv-border text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
-            <Plus className="w-5 h-5 text-tv-brand" />
-            Settings Manager
-          </Link>
-          <Link to="/logs" className="flex items-center gap-3 text-tv-text-muted hover:text-tv-text-primary px-4 py-3 rounded-tv-md font-medium transition-colors">
-            <Terminal className="w-5 h-5" />
-            App Logs
-          </Link>
-        </nav>
-      </aside>
+    <div className="p-4 space-y-4 max-w-7xl mx-auto font-sans">
+      
+      {/* Page Header */}
+      <div className="pb-1 border-b border-border-subtle/50">
+        <h1 className="page-title">Settings & Configurations</h1>
+        <p className="meta-text mt-0.5">
+          Configure symbol information, pricing models, database storage layouts, and application defaults.
+        </p>
+      </div>
 
-      {/* Main Workspace Area */}
-      <main className="flex-1 p-8 md:p-12 overflow-y-auto max-w-4xl">
-        <div className="mb-10">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4 text-tv-text-primary leading-tight">
-            Settings & Configurations
-          </h1>
-          <p className="text-tv-text-muted text-lg max-w-2xl">
-            Configure symbol information, pricing models, database storage layouts, and application defaults.
-          </p>
-        </div>
+      {/* Tab Selection */}
+      <div className="flex border-b border-border-subtle gap-4 text-xs font-semibold uppercase tracking-wider">
+        <button
+          onClick={() => {
+            setActiveTab('symbols');
+            window.history.pushState(null, '', '/settings?tab=symbols');
+          }}
+          className={`pb-2 border-b-2 px-1 transition-all cursor-pointer ${
+            activeTab === 'symbols'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          Manage Symbols
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('app');
+            window.history.pushState(null, '', '/settings?tab=app');
+          }}
+          className={`pb-2 border-b-2 px-1 transition-all cursor-pointer ${
+            activeTab === 'app'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          Application Defaults
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('logs');
+            window.history.pushState(null, '', '/settings?tab=logs');
+          }}
+          className={`pb-2 border-b-2 px-1 transition-all cursor-pointer ${
+            activeTab === 'logs'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          System Logs
+        </button>
+      </div>
 
-        {/* Tab Selection */}
-        <div className="flex border-b border-tv-border mb-8 gap-6">
-          <button
-            onClick={() => {
-              setActiveTab('symbol')
-              window.history.pushState(null, '', '/settings?tab=symbol')
-            }}
-            className={`pb-4 text-lg font-semibold border-b-2 px-1 transition-all ${
-              activeTab === 'symbol'
-                ? 'border-tv-brand text-tv-brand'
-                : 'border-transparent text-tv-text-muted hover:text-tv-text-primary'
-            }`}
-          >
-            Symbol Configuration
-          </button>
-          <button
-            onClick={() => {
-              setActiveTab('app')
-              window.history.pushState(null, '', '/settings?tab=app')
-            }}
-            className={`pb-4 text-lg font-semibold border-b-2 px-1 transition-all ${
-              activeTab === 'app'
-                ? 'border-tv-brand text-tv-brand'
-                : 'border-transparent text-tv-text-muted hover:text-tv-text-primary'
-            }`}
-          >
-            Application Settings
-          </button>
+      {/* TAB 1: MANAGE SYMBOLS */}
+      {activeTab === 'symbols' && (
+        <div className="panel space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-border-subtle/40">
+            <h2 className="section-title flex items-center gap-1.5">
+              <Settings2 className="w-4 h-4 text-accent" />
+              Database Symbol Metadata Overview
+            </h2>
+          </div>
+          
+          {isLoadingSymbols ? (
+            <div className="flex items-center justify-center py-10 text-xs text-text-secondary font-mono">
+              <RefreshCw className="w-4 h-4 animate-spin text-accent mr-2" />
+              <span>Scanning database tables...</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[900px]">
+                <thead>
+                  <tr className="border-b border-border-subtle text-text-secondary text-[11px] uppercase font-semibold">
+                    <th className="py-2 px-2">Symbol</th>
+                    <th className="py-2 px-2">Exchange & Type</th>
+                    <th className="py-2 px-2">Price Scale</th>
+                    <th className="py-2 px-2">Candle Boundaries</th>
+                    <th className="py-2 px-2 text-center" colSpan={8}>Timeframe Counts</th>
+                    <th className="py-2 px-2 text-right">Actions</th>
+                  </tr>
+                  <tr className="border-b border-border-subtle/30 text-[9px] text-text-muted font-mono bg-bg-base/30">
+                    <th colSpan={4} className="py-1"></th>
+                    <th className="py-1 text-center w-8">1m</th>
+                    <th className="py-1 text-center w-8">5m</th>
+                    <th className="py-1 text-center w-8">15m</th>
+                    <th className="py-1 text-center w-8">30m</th>
+                    <th className="py-1 text-center w-8">1h</th>
+                    <th className="py-1 text-center w-8">4h</th>
+                    <th className="py-1 text-center w-8">1d</th>
+                    <th className="py-1 text-center w-8">1w</th>
+                    <th className="py-1"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle/30">
+                  {symbolsOverview.map((sym) => (
+                    <tr key={sym.symbol} className="compact-row text-xs hover:bg-bg-surface-elevated/45 transition-colors">
+                      <td className="py-2 px-2 font-semibold">
+                        <div className="flex items-center gap-1.5">
+                          {sym.symbol_logo && (
+                            <img 
+                              src={sym.symbol_logo} 
+                              alt={sym.symbol} 
+                              className="w-4 h-4 rounded-full bg-bg-base" 
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+                            />
+                          )}
+                          <div>
+                            <span className="text-text-primary font-mono">{sym.symbol}</span>
+                            <div className="text-[10px] text-text-secondary font-normal">{sym.description}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2 px-2 text-[11px] leading-tight">
+                        <div className="capitalize font-medium text-text-primary">{sym.type}</div>
+                        <div className="text-[10px] text-text-muted font-mono">{sym.exchange}</div>
+                      </td>
+                      <td className="py-2 px-2 font-mono text-[11px] text-text-secondary">
+                        {sym.pricescale}
+                      </td>
+                      <td className="py-2 px-2 text-[10px] font-mono text-text-secondary leading-tight whitespace-nowrap">
+                        <div className="text-[9px] text-text-muted">Start: {sym.first_ts}</div>
+                        <div className="text-[9px] text-text-muted">End: {sym.last_ts}</div>
+                      </td>
+                      <td className="py-2 text-center font-mono text-[11px] text-text-secondary">
+                        {sym.timeframe_counts['1m'] ? sym.timeframe_counts['1m'].toLocaleString() : '-'}
+                      </td>
+                      <td className="py-2 text-center font-mono text-[11px] text-text-secondary">
+                        {sym.timeframe_counts['5m'] ? sym.timeframe_counts['5m'].toLocaleString() : '-'}
+                      </td>
+                      <td className="py-2 text-center font-mono text-[11px] text-text-secondary">
+                        {sym.timeframe_counts['15m'] ? sym.timeframe_counts['15m'].toLocaleString() : '-'}
+                      </td>
+                      <td className="py-2 text-center font-mono text-[11px] text-text-secondary">
+                        {sym.timeframe_counts['30m'] ? sym.timeframe_counts['30m'].toLocaleString() : '-'}
+                      </td>
+                      <td className="py-2 text-center font-mono text-[11px] text-text-secondary">
+                        {sym.timeframe_counts['1h'] ? sym.timeframe_counts['1h'].toLocaleString() : '-'}
+                      </td>
+                      <td className="py-2 text-center font-mono text-[11px] text-text-secondary">
+                        {sym.timeframe_counts['4h'] ? sym.timeframe_counts['4h'].toLocaleString() : '-'}
+                      </td>
+                      <td className="py-2 text-center font-mono text-[11px] text-text-secondary">
+                        {sym.timeframe_counts['1d'] ? sym.timeframe_counts['1d'].toLocaleString() : '-'}
+                      </td>
+                      <td className="py-2 text-center font-mono text-[11px] text-text-secondary">
+                        {sym.timeframe_counts['1w'] ? sym.timeframe_counts['1w'].toLocaleString() : '-'}
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        <button
+                          onClick={() => startEditing(sym)}
+                          className="h-6 px-2.5 bg-bg-base hover:bg-bg-surface-elevated border border-border-subtle hover:border-accent text-text-secondary hover:text-accent rounded text-[11px] font-semibold transition-all cursor-pointer"
+                        >
+                          Config
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
+      )}
 
-        {/* TAB 1: SYMBOL CONFIGURATION */}
-        {activeTab === 'symbol' && (
-          <div className="bg-tv-bg-secondary border border-tv-border rounded-tv-xl p-8 backdrop-blur-xl shadow-2xl">
-            <form onSubmit={handleSaveSymbolSettings} className="space-y-6">
-              
-              {/* Symbol Select Option */}
-              <div className="space-y-2">
-                <label htmlFor="symbol" className="block text-sm font-semibold text-tv-text-muted">
-                  Select Active Symbol
+      {/* TAB 2: APPLICATION SETTINGS */}
+      {activeTab === 'app' && (
+        <div className="panel max-w-2xl">
+          <h2 className="section-title mb-4 flex items-center gap-1.5 pb-2 border-b border-border-subtle/40">
+            <Settings2 className="w-4 h-4 text-accent" />
+            Workspace Storage & Environment
+          </h2>
+
+          <form onSubmit={handleSaveAppSettings} className="space-y-4">
+            <div className="space-y-1">
+              <label htmlFor="data-folder-path" className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                DuckDB Database Folder Storage Path
+              </label>
+              <input
+                id="data-folder-path"
+                type="text"
+                value={dataFolderPath}
+                onChange={(e) => setDataFolderPath(e.target.value)}
+                placeholder="e.g. /home/ajinkya/projects/TestsGithub/16_july/db"
+                required
+                className="w-full text-xs font-mono"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label htmlFor="default-timeframe" className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                  Default View Timeframe
                 </label>
                 <select
-                  id="symbol"
-                  value={selectedSymbol}
-                  onChange={(e) => handleSymbolChange(e.target.value)}
-                  className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
+                  id="default-timeframe"
+                  value={defaultTimeframe}
+                  onChange={(e) => setDefaultTimeframe(e.target.value)}
+                  className="w-full"
                 >
-                  <option value="XAUUSD">XAUUSD (Gold Spot)</option>
-                  <option value="XAGUSD">XAGUSD (Silver Spot)</option>
-                  <option value="BTCUSD">BTCUSD (Bitcoin)</option>
-                  {Object.keys(configs).filter(s => s !== 'XAUUSD' && s !== 'XAGUSD' && s !== 'BTCUSD').map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
+                  <option value="1m">1 Minute</option>
+                  <option value="5m">5 Minutes</option>
+                  <option value="15m">15 Minutes</option>
+                  <option value="1h">1 Hour</option>
+                  <option value="4h">4 Hours</option>
+                  <option value="1D">Daily (1D)</option>
+                  <option value="1W">Weekly (1W)</option>
                 </select>
               </div>
 
-              <hr className="border-tv-border my-8" />
+              <div className="space-y-1">
+                <label htmlFor="default-risk-pct" className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                  Backtesting Default Risk (%)
+                </label>
+                <input
+                  id="default-risk-pct"
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="100"
+                  value={defaultRiskPct}
+                  onChange={(e) => setDefaultRiskPct(Number(e.target.value))}
+                  required
+                  className="w-full"
+                />
+              </div>
 
-              {/* Config Fields Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Description */}
-                <div className="space-y-2">
-                  <label htmlFor="description" className="block text-sm font-semibold text-tv-text-muted">
-                    Custom Description
-                  </label>
+              <div className="space-y-1 md:col-span-2">
+                <label htmlFor="app-theme" className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                  Active Terminal Theme Mode
+                </label>
+                <select
+                  id="app-theme"
+                  value={appTheme}
+                  onChange={(e) => setAppTheme(e.target.value)}
+                  className="w-full"
+                >
+                  <option value="dark">Dark Bloomberg/TradingView Terminal theme</option>
+                  <option value="light">Light developer sandbox theme</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Save Buttons & Status */}
+            <div className="pt-2 flex items-center justify-between gap-4">
+              <button
+                type="submit"
+                disabled={isSavingApp}
+                className="h-8 min-w-[150px] bg-accent hover:bg-accent-hover text-black font-bold text-xs rounded transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSavingApp ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Saving Defaults...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    Save Configuration
+                  </>
+                )}
+              </button>
+
+              {saveAppStatus === 'success' && (
+                <div className="flex items-center gap-1.5 text-bull bg-bull-soft border border-bull/20 px-3 py-1 rounded text-xs font-semibold">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Settings updated successfully!</span>
+                </div>
+              )}
+              {saveAppStatus === 'error' && (
+                <div className="flex items-center gap-1.5 text-bear bg-bear-soft border border-bear/20 px-3 py-1 rounded text-xs font-semibold">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>Failed to save configurations.</span>
+                </div>
+              )}
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* TAB 3: SYSTEM LOGS */}
+      {activeTab === 'logs' && (
+        <div className="panel">
+          <LogsPage embedded={true} />
+        </div>
+      )}
+
+      {/* Symbol Edit Modal Overlay */}
+      {editingSymbol && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-bg-surface border border-border-subtle rounded-lg w-full max-w-md shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="p-4 border-b border-border-subtle flex justify-between items-center bg-bg-surface shrink-0">
+              <div>
+                <h3 className="text-sm font-bold text-text-primary flex items-center gap-1">Configure {selectedSymbol}</h3>
+                <p className="text-[10px] text-text-secondary mt-0.5">Modify ticker database overrides</p>
+              </div>
+              <button
+                onClick={() => setEditingSymbol(null)}
+                className="text-text-secondary hover:text-text-primary p-1 bg-bg-base border border-border-subtle rounded transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form Content */}
+            <form onSubmit={handleSaveSymbolSettings} className="p-4 overflow-y-auto space-y-3 flex-1">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Description</label>
+                <input
+                  type="text"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="e.g. Gold Spot / U.S. Dollar"
+                  required
+                  className="w-full"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Exchange</label>
                   <input
-                    id="description"
                     type="text"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="e.g. Gold Spot / U.S. Dollar"
+                    value={exchange}
+                    onChange={(e) => setExchange(e.target.value.toUpperCase())}
+                    placeholder="e.g. FOREX"
                     required
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
+                    className="w-full font-mono"
                   />
                 </div>
 
-                {/* Asset Type */}
-                <div className="space-y-2">
-                  <label htmlFor="type" className="block text-sm font-semibold text-tv-text-muted">
-                    Asset Type
-                  </label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Asset Type</label>
                   <select
-                    id="type"
                     value={type}
                     onChange={(e) => setType(e.target.value)}
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
+                    className="w-full"
                   >
                     <option value="forex">Forex</option>
                     <option value="commodity">Commodity</option>
@@ -348,256 +518,93 @@ export default function SettingsPage() {
                     <option value="index">Index</option>
                   </select>
                 </div>
+              </div>
 
-                {/* Exchange */}
-                <div className="space-y-2">
-                  <label htmlFor="exchange" className="block text-sm font-semibold text-tv-text-muted">
-                    Exchange Name
-                  </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Price Scale</label>
                   <input
-                    id="exchange"
-                    type="text"
-                    value={exchange}
-                    onChange={(e) => setExchange(e.target.value.toUpperCase())}
-                    placeholder="e.g. FOREX or COMEX"
+                    type="number"
+                    value={priceScale}
+                    onChange={(e) => setPriceScale(Number(e.target.value))}
                     required
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
+                    className="w-full font-mono"
                   />
                 </div>
 
-                {/* Price Scale */}
-                <div className="space-y-2">
-                  <label htmlFor="pricescale" className="block text-sm font-semibold text-tv-text-muted">
-                    Price Scale / Precision
-                  </label>
-                  <select
-                    id="pricescale"
-                    value={priceScale}
-                    onChange={(e) => setPriceScale(Number(e.target.value))}
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
-                  >
-                    <option value={100}>100 (2 decimals - e.g. Cryptos / Commodities)</option>
-                    <option value={1000}>1000 (3 decimals - e.g. indices / pairs)</option>
-                    <option value={100000}>100000 (5 decimals - e.g. Forex spot)</option>
-                  </select>
-                </div>
-
-                {/* Session */}
-                <div className="space-y-2">
-                  <label htmlFor="session" className="block text-sm font-semibold text-tv-text-muted">
-                    Market Session Hours
-                  </label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Logo URL</label>
                   <input
-                    id="session"
+                    type="text"
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    placeholder="e.g. /logos/gold.svg"
+                    className="w-full text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Session Hours</label>
+                  <input
                     type="text"
                     value={session}
                     onChange={(e) => setSession(e.target.value)}
                     placeholder="e.g. 24x7 or 0900-1600"
                     required
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
+                    className="w-full font-mono"
                   />
                 </div>
 
-                {/* Timezone */}
-                <div className="space-y-2">
-                  <label htmlFor="timezone" className="block text-sm font-semibold text-tv-text-muted">
-                    Timezone
-                  </label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Timezone</label>
                   <input
-                    id="timezone"
                     type="text"
                     value={timezone}
                     onChange={(e) => setTimezone(e.target.value)}
-                    placeholder="e.g. Etc/UTC or America/New_York"
+                    placeholder="e.g. Etc/UTC"
                     required
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
+                    className="w-full font-mono"
                   />
                 </div>
-
-                {/* Logo URL */}
-                <div className="space-y-2 md:col-span-2">
-                  <label htmlFor="logourl" className="block text-sm font-semibold text-tv-text-muted">
-                    Symbol Logo Path
-                  </label>
-                  <div className="flex gap-4 items-center">
-                    <input
-                      id="logourl"
-                      type="text"
-                      value={logoUrl}
-                      onChange={(e) => setLogoUrl(e.target.value)}
-                      placeholder="e.g. /logos/gold.svg"
-                      required
-                      className="flex-1 bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
-                    />
-                    <div className="w-12 h-12 bg-tv-bg-primary border border-tv-border rounded-tv-md flex items-center justify-center overflow-hidden p-2">
-                      <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/logos/default.png'
-                      }} />
-                    </div>
-                  </div>
-                </div>
-
               </div>
 
-              {/* Save Button */}
-              <div className="pt-4 flex items-center justify-between gap-4">
+              {saveStatus === 'success' && (
+                <div className="flex items-center gap-1.5 text-bull bg-bull-soft border border-bull/20 p-2 rounded text-xs font-semibold">
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                  <span>Metadata saved successfully!</span>
+                </div>
+              )}
+              {saveStatus === 'error' && (
+                <div className="flex items-center gap-1.5 text-bear bg-bear-soft border border-bear/20 p-2 rounded text-xs font-semibold">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>Failed to save database config.</span>
+                </div>
+              )}
+
+              {/* Modal Footer Buttons */}
+              <div className="pt-3 border-t border-border-subtle/50 flex justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingSymbol(null)}
+                  className="h-8 px-4 bg-bg-base border border-border-subtle hover:border-text-secondary text-text-primary rounded text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="flex-1 max-w-xs bg-tv-brand hover:bg-tv-brand-hover text-tv-text-primary font-bold py-4 rounded-tv-sm transition-all hover:scale-105 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-tv-brand/10 disabled:opacity-50"
+                  className="h-8 px-4 bg-accent hover:bg-accent-hover text-black rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
                 >
-                  {isSaving ? (
-                    <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                      Saving Changes...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-5 h-5" />
-                      Save Symbol Configuration
-                    </>
-                  )}
+                  {isSaving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  Save Ticker
                 </button>
-
-                {/* Status Banner */}
-                {saveStatus === 'success' && (
-                  <div className="flex items-center gap-2 text-tv-green bg-tv-green/10 border border-tv-green/25 px-4 py-3.5 rounded-tv-md text-sm font-semibold">
-                    <CheckCircle2 className="w-5 h-5" />
-                    <span>Symbol Configuration updated!</span>
-                  </div>
-                )}
-                {saveStatus === 'error' && (
-                  <div className="flex items-center gap-2 text-tv-red bg-tv-red/10 border border-tv-red/25 px-4 py-3.5 rounded-tv-md text-sm font-semibold">
-                    <AlertTriangle className="w-5 h-5" />
-                    <span>Failed to save configurations.</span>
-                  </div>
-                )}
               </div>
-
             </form>
           </div>
-        )}
-
-        {/* TAB 2: APPLICATION SETTINGS */}
-        {activeTab === 'app' && (
-          <div className="bg-tv-bg-secondary border border-tv-border rounded-tv-xl p-8 backdrop-blur-xl shadow-2xl">
-            <form onSubmit={handleSaveAppSettings} className="space-y-6">
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Storage path */}
-                <div className="space-y-2 md:col-span-2">
-                  <label htmlFor="data-folder-path" className="block text-sm font-semibold text-tv-text-muted">
-                    DuckDB Database Storage Folder Path
-                  </label>
-                  <input
-                    id="data-folder-path"
-                    type="text"
-                    value={dataFolderPath}
-                    onChange={(e) => setDataFolderPath(e.target.value)}
-                    placeholder="e.g. /home/ajinkya/projects/TestsGithub/16_july/db"
-                    required
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary placeholder-tv-text-muted focus:outline-none focus:border-tv-brand transition-colors"
-                  />
-                </div>
-
-                {/* Default timeframe */}
-                <div className="space-y-2">
-                  <label htmlFor="default-timeframe" className="block text-sm font-semibold text-tv-text-muted">
-                    Default Active Timeframe
-                  </label>
-                  <select
-                    id="default-timeframe"
-                    value={defaultTimeframe}
-                    onChange={(e) => setDefaultTimeframe(e.target.value)}
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
-                  >
-                    <option value="1m">1 Minute</option>
-                    <option value="5m">5 Minutes</option>
-                    <option value="15m">15 Minutes</option>
-                    <option value="1h">1 Hour</option>
-                    <option value="4h">4 Hours</option>
-                    <option value="1D">Daily (1D)</option>
-                    <option value="1W">Weekly (1W)</option>
-                  </select>
-                </div>
-
-                {/* Default risk % */}
-                <div className="space-y-2">
-                  <label htmlFor="default-risk-pct" className="block text-sm font-semibold text-tv-text-muted">
-                    Default Backtesting Risk Percentage (%)
-                  </label>
-                  <input
-                    id="default-risk-pct"
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    max="100"
-                    value={defaultRiskPct}
-                    onChange={(e) => setDefaultRiskPct(Number(e.target.value))}
-                    required
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
-                  />
-                </div>
-
-                {/* UI theme toggle */}
-                <div className="space-y-2">
-                  <label htmlFor="app-theme" className="block text-sm font-semibold text-tv-text-muted">
-                    Default UI Theme
-                  </label>
-                  <select
-                    id="app-theme"
-                    value={appTheme}
-                    onChange={(e) => setAppTheme(e.target.value)}
-                    className="w-full bg-tv-bg-primary border border-tv-border rounded-tv-md px-4 py-3 text-tv-text-primary focus:outline-none focus:border-tv-brand transition-colors"
-                  >
-                    <option value="dark">Dark Slate Mode</option>
-                    <option value="light">Light Gray Mode</option>
-                  </select>
-                </div>
-
-              </div>
-
-              {/* Save Button */}
-              <div className="pt-4 flex items-center justify-between gap-4">
-                <button
-                  type="submit"
-                  disabled={isSavingApp}
-                  className="flex-1 max-w-xs bg-tv-brand hover:bg-tv-brand-hover text-tv-text-primary font-bold py-4 rounded-tv-sm transition-all hover:scale-105 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-tv-brand/10 disabled:opacity-50"
-                >
-                  {isSavingApp ? (
-                    <>
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                      Saving Settings...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-5 h-5" />
-                      Save Application Settings
-                    </>
-                  )}
-                </button>
-
-                {/* Status Banner */}
-                {saveAppStatus === 'success' && (
-                  <div className="flex items-center gap-2 text-tv-green bg-tv-green/10 border border-tv-green/25 px-4 py-3.5 rounded-tv-md text-sm font-semibold">
-                    <CheckCircle2 className="w-5 h-5" />
-                    <span>Application settings updated!</span>
-                  </div>
-                )}
-                {saveAppStatus === 'error' && (
-                  <div className="flex items-center gap-2 text-tv-red bg-tv-red/10 border border-tv-red/25 px-4 py-3.5 rounded-tv-md text-sm font-semibold">
-                    <AlertTriangle className="w-5 h-5" />
-                    <span>Failed to save settings.</span>
-                  </div>
-                )}
-              </div>
-
-            </form>
-          </div>
-        )}
-
-      </main>
+        </div>
+      )}
     </div>
-  )
+  );
 }
