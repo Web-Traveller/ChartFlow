@@ -5,21 +5,32 @@ import LogsPage from './LogsPage';
 export default function SettingsPage() {
   // Tab control
   const [activeTab, setActiveTab] = useState<'symbols' | 'app' | 'logs'>(() => {
-    const params = new URLSearchParams(window.location.search);
+    const searchString = window.location.search || (window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '');
+    const params = new URLSearchParams(searchString);
     const tabParam = params.get('tab');
     if (tabParam === 'app') return 'app';
     if (tabParam === 'logs') return 'logs';
     return 'symbols';
   });
 
-  // Listen to search changes (e.g. back buttons)
+  // Listen to search changes (e.g. back buttons or hash routing)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tabParam = params.get('tab');
-    if (tabParam === 'app' || tabParam === 'symbols' || tabParam === 'logs') {
-      setActiveTab(tabParam);
-    }
-  }, [window.location.search]);
+    const handleUrlChange = () => {
+      const searchString = window.location.search || (window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '');
+      const params = new URLSearchParams(searchString);
+      const tabParam = params.get('tab');
+      if (tabParam === 'app' || tabParam === 'symbols' || tabParam === 'logs') {
+        setActiveTab(tabParam);
+      }
+    };
+    
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
 
   // Symbols Overview states
   const [symbolsOverview, setSymbolsOverview] = useState<any[]>([]);
@@ -187,7 +198,7 @@ export default function SettingsPage() {
         <button
           onClick={() => {
             setActiveTab('symbols');
-            window.history.pushState(null, '', '/settings?tab=symbols');
+            window.location.hash = '#/settings?tab=symbols';
           }}
           className={`pb-2 border-b-2 px-1 transition-all cursor-pointer ${
             activeTab === 'symbols'
@@ -200,7 +211,7 @@ export default function SettingsPage() {
         <button
           onClick={() => {
             setActiveTab('app');
-            window.history.pushState(null, '', '/settings?tab=app');
+            window.location.hash = '#/settings?tab=app';
           }}
           className={`pb-2 border-b-2 px-1 transition-all cursor-pointer ${
             activeTab === 'app'
@@ -213,7 +224,7 @@ export default function SettingsPage() {
         <button
           onClick={() => {
             setActiveTab('logs');
-            window.history.pushState(null, '', '/settings?tab=logs');
+            window.location.hash = '#/settings?tab=logs';
           }}
           className={`pb-2 border-b-2 px-1 transition-all cursor-pointer ${
             activeTab === 'logs'
