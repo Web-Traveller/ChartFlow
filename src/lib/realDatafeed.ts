@@ -122,49 +122,13 @@ const realDatafeed: any = {
   },
 
   subscribeBars: (
-    symbolInfo: any,
+    _symbolInfo: any,
     _resolution: string,
-    onRealtimeCallback: any,
-    subscribeUID: string,
+    _onRealtimeCallback: any,
+    _subscribeUID: string,
     _onResetCacheNeededCallback: any,
   ) => {
-    if (realDatafeed._intervals[subscribeUID]) {
-      clearInterval(realDatafeed._intervals[subscribeUID]);
-    }
-
-    // Seed the simulation with the latest closed price from the /quotes API
-    fetch(`${API_BASE}/quotes?symbols=${encodeURIComponent(symbolInfo.name)}`)
-      .then(res => res.json())
-      .then(data => {
-        let lastPrice = 2000.0; // fallback
-        if (data.s === 'ok' && data.d && data.d[0] && data.d[0].v) {
-          lastPrice = data.d[0].v.lp;
-        }
-
-        realDatafeed._intervals[subscribeUID] = setInterval(() => {
-          const time = new Date().getTime(); // current system time
-          const change = (Math.random() - 0.5) * (lastPrice * 0.0005); // max 0.05% fluctuation
-          const open = lastPrice;
-          const close = lastPrice + change;
-          const high = Math.max(open, close) + Math.random() * (lastPrice * 0.0002);
-          const low = Math.min(open, close) - Math.random() * (lastPrice * 0.0002);
-          const volume = Math.random() * 100;
-
-          onRealtimeCallback({
-            time: time,
-            open: open,
-            high: high,
-            low: low,
-            close: close,
-            volume: volume,
-          });
-
-          lastPrice = close;
-        }, 2000);
-      })
-      .catch(err => {
-        console.error('Datafeed subscribeBars error:', err);
-      });
+    // No-op: backtesting-only app, no live updates are generated.
   },
 
   unsubscribeBars: (subscribeUID: string) => {
