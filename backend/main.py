@@ -39,9 +39,86 @@ from pathlib import Path
 from typing import Any, Optional
 
 import duckdb
+import logging
+import traceback
 from fastapi import FastAPI, Form, HTTPException, Query, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from pydantic import BaseModel
+from typing import Any, List, Dict, Optional
+
+# ---------------------------------------------------------------------------
+# Logging Setup
+# ---------------------------------------------------------------------------
+class JSONLinesHandler(logging.Handler):
+    def __init__(self, filename: Path):
+        super().__init__()
+        self.filename = filename
+        self.filename.parent.mkdir(parents=True, exist_ok=True)
+
+    def emit(self, record):
+        try:
+            self.acquire()
+            level_name = record.levelname.lower()
+            if level_name in ("warning", "warn"):
+                level = "warning"
+            elif level_name in ("error", "critical"):
+                level = "error"
+            else:
+                level = "info"
+
+            message = self.format(record)
+            
+            # Skip logging for our own logs endpoint queries/posts to avoid loop
+            if "/1.1/logs" in message:
+                return
+
+            stack = None
+            if record.exc_info:
+                stack = "".join(traceback.format_exception(*record.exc_info))
+
+            standard_attrs = {
+                'name', 'msg', 'args', 'levelname', 'levelno', 'pathname', 'filename',
+                'module', 'exc_info', 'exc_text', 'stack_info', 'lineno', 'funcName',
+                'created', 'msecs', 'relativeCreated', 'thread', 'threadName',
+                'processName', 'process', 'message'
+            }
+            context = {}
+            for k, v in record.__dict__.items():
+                if k not in standard_attrs:
+                    try:
+                        json.dumps(v)
+                        context[k] = v
+                    except Exception:
+                        context[k] = str(v)
+
+            log_entry = {
+                "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "source": "backend",
+                "level": level,
+                "message": message,
+                "context": context,
+                "stack": stack
+            }
+
+            with open(self.filename, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            self.handleError(record)
+        finally:
+            self.release()
+
+# Setup logging
+log_file = Path(__file__).resolve().parent / "storage" / "logs" / "app.log"
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+# Clear other handlers or prevent duplicates
+if not any(isinstance(h, JSONLinesHandler) for h in logger.handlers):
+    json_handler = JSONLinesHandler(log_file)
+    json_handler.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(json_handler)
 
 # ---------------------------------------------------------------------------
 # Settings
@@ -89,6 +166,28 @@ app.add_middleware(
     allow_credentials=False,
     max_age=600,
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, StarletteHTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail}
+        )
+    if isinstance(exc, RequestValidationError):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": exc.errors()}
+        )
+    
+    # Log the traceback and exception using standard logging module
+    logging.error("Unhandled exception: %s", str(exc), exc_info=exc)
+    
+    return JSONResponse(
+        status_code=500,
+        content={"status": "error", "message": "Internal server error"}
+    )
 
 
 def get_con() -> duckdb.DuckDBPyConnection:
@@ -298,6 +397,9 @@ def udf_history(
     or  { "s":"no_data", "nextTime":<unix> }   ← tells library where next bar is
     """
     try:
+        sess_start_dt = None
+        sess_end_dt = None
+        
         # --- Handle session limits clamping -----------------------
         if session:
             if SESSIONS_FILE.exists():
@@ -310,59 +412,62 @@ def udf_history(
                         if time_start_str and time_end_str:
                             sess_start_dt = datetime.strptime(time_start_str, "%Y-%m-%d")
                             sess_end_dt = datetime.strptime(time_end_str, "%Y-%m-%d")
-                            
-                            sess_start_ts = int(sess_start_dt.replace(tzinfo=timezone.utc).timestamp())
-                            sess_end_ts = int(sess_end_dt.replace(tzinfo=timezone.utc).timestamp())
-                            
-                            if from_ts < sess_start_ts:
-                                from_ts = sess_start_ts
-                            if to_ts > sess_end_ts:
-                                to_ts = sess_end_ts
-                            
-                            if from_ts > to_ts or to_ts < sess_start_ts or from_ts > sess_end_ts:
-                                return {"s": "no_data"}
                 except Exception as e:
                     print("Error clamping session range:", e)
 
         table = _resolve_table(resolution)
-
-        # IMPORTANT: DuckDB stores TIMESTAMP as timezone-naive UTC.
-        # Use datetime.utcfromtimestamp() (naive) – NOT fromtimestamp(tz=utc).
-        # A timezone-aware object causes a ConversionException inside DuckDB.
-        from_dt = datetime.utcfromtimestamp(from_ts)
-        to_dt   = datetime.utcfromtimestamp(to_ts)
-
         con = get_con()
 
-        # --- Clamp to_dt to the latest bar in the DB -----------------------
-        # The charting library often requests ranges beyond our data window
-        # (e.g. today / future).  Without clamping, countback queries are
-        # technically correct but may confuse the library when nextTime can't
-        # be provided.  We clamp so the most-recent available data always shows.
+        # --- Get the latest bar in the DB ----------------------------------
         last_row = con.execute(
             f"SELECT max(ts) FROM {table} WHERE symbol = ?", [symbol]
         ).fetchone()
-
         db_last_dt = last_row[0] if (last_row and last_row[0]) else None
 
-        if db_last_dt and to_dt > db_last_dt:
-            # Shift the entire window backward so we capture the same duration of data ending at db_last_dt
+        # --- Determine effective max allowed datetime ----------------------
+        max_allowed_dt = db_last_dt
+        if sess_end_dt:
+            if max_allowed_dt:
+                max_allowed_dt = min(max_allowed_dt, sess_end_dt)
+            else:
+                max_allowed_dt = sess_end_dt
+
+        # Convert timezone-naive request times to datetime objects
+        from_dt = datetime.utcfromtimestamp(from_ts)
+        to_dt   = datetime.utcfromtimestamp(to_ts)
+
+        # --- Shift window if requesting beyond maximum allowed date --------
+        if max_allowed_dt and to_dt > max_allowed_dt:
             duration = to_dt - from_dt
-            to_dt = db_last_dt   # clamp: never ask beyond what we have
+            to_dt = max_allowed_dt
             from_dt = to_dt - duration
+
+        # --- Clamp start date to session start -----------------------------
+        if sess_start_dt and from_dt < sess_start_dt:
+            from_dt = sess_start_dt
+
+        # If range becomes invalid, return no_data
+        if from_dt > to_dt:
+            con.close()
+            return {"s": "no_data"}
 
         if countback and countback > 0:
             # Return exactly `countback` bars ending at (and including) to_dt.
-            rows = con.execute(
-                f"""
+            query_str = f"""
                 SELECT ts, open, high, low, close, volume
                 FROM   {table}
                 WHERE  symbol = ? AND ts <= ?
+            """
+            params = [symbol, to_dt]
+            if sess_start_dt:
+                query_str += " AND ts >= ?"
+                params.append(sess_start_dt)
+            query_str += """
                 ORDER  BY ts DESC
                 LIMIT  ?
-                """,
-                [symbol, to_dt, countback],
-            ).fetchall()
+            """
+            params.append(countback)
+            rows = con.execute(query_str, params).fetchall()
             rows.reverse()   # oldest → newest
         else:
             rows = con.execute(
@@ -377,14 +482,17 @@ def udf_history(
 
         if not rows:
             # Look for the nearest future bar so the library knows where to jump
-            next_row = con.execute(
-                f"""
+            query_str = f"""
                 SELECT ts FROM {table}
                 WHERE  symbol = ? AND ts > ?
-                ORDER  BY ts ASC LIMIT 1
-                """,
-                [symbol, to_dt],
-            ).fetchone()
+            """
+            params = [symbol, to_dt]
+            if max_allowed_dt:
+                query_str += " AND ts <= ?"
+                params.append(max_allowed_dt)
+            query_str += " ORDER BY ts ASC LIMIT 1"
+            
+            next_row = con.execute(query_str, params).fetchone()
             con.close()
 
             resp: dict = {"s": "no_data"}
@@ -704,6 +812,86 @@ def drawing_templates_delete(
 
 
 # ===========================================================================
+# ── LOGGING SYSTEM ENDPOINTS
+# ===========================================================================
+
+class FrontendLogEntry(BaseModel):
+    timestamp: str
+    level: str
+    message: str
+    context: Optional[Dict[str, Any]] = None
+    stack: Optional[str] = None
+
+
+@app.post("/1.1/logs")
+async def post_frontend_logs(logs: List[FrontendLogEntry]):
+    log_file_path = Path(__file__).resolve().parent / "storage" / "logs" / "app.log"
+    log_file_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_file_path, "a", encoding="utf-8") as f:
+        for entry in logs:
+            level = entry.level.lower()
+            if level not in ("info", "warning", "error"):
+                if level in ("warn",):
+                    level = "warning"
+                elif level in ("error", "critical", "err"):
+                    level = "error"
+                else:
+                    level = "info"
+            
+            log_obj = {
+                "timestamp": entry.timestamp,
+                "source": "frontend",
+                "level": level,
+                "message": entry.message,
+                "context": entry.context or {},
+                "stack": entry.stack
+            }
+            f.write(json.dumps(log_obj) + "\n")
+    return {"status": "ok"}
+
+
+@app.get("/1.1/logs")
+def get_logs(
+    level: Optional[str] = Query(None),
+    source: Optional[str] = Query(None),
+    limit: int = Query(200, ge=1, le=1000)
+):
+    log_file_path = Path(__file__).resolve().parent / "storage" / "logs" / "app.log"
+    if not log_file_path.exists():
+        return []
+
+    entries = []
+    with open(log_file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                if level and entry.get("level") != level:
+                    continue
+                if source and entry.get("source") != source:
+                    continue
+                entries.append(entry)
+            except Exception:
+                pass
+
+    recent_entries = entries[-limit:]
+    recent_entries.reverse()
+    return recent_entries
+
+
+@app.get("/1.1/trigger_error_test")
+def trigger_error_test():
+    raise ValueError("This is a deliberately triggered backend test error!")
+
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok"}
+
+
+# ===========================================================================
 # ── SYMBOL CONFIGURATION & SETTINGS
 # ===========================================================================
 
@@ -738,6 +926,165 @@ async def symbol_settings_save(request: Request):
     
     SETTINGS_FILE.write_text(json.dumps(data, indent=2))
     return {"status": "ok"}
+
+
+@app.get("/1.1/symbols_overview")
+def get_symbols_overview():
+    """GET /1.1/symbols_overview -> returns aggregated metrics and configuration info for symbols"""
+    try:
+        con = get_con()
+        symbols = _all_symbols(con)
+        
+        # Load symbol settings
+        settings_path = Path(__file__).resolve().parent / "storage" / "symbol_settings.json"
+        symbol_settings = {}
+        if settings_path.exists():
+            try:
+                symbol_settings = json.loads(settings_path.read_text())
+            except Exception:
+                pass
+        
+        overview = []
+        timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
+        
+        for symbol in symbols:
+            # Get date range from candles_1m
+            range_row = con.execute(
+                "SELECT min(ts), max(ts) FROM candles_1m WHERE symbol = ?",
+                [symbol]
+            ).fetchone()
+            
+            min_date = range_row[0].strftime("%Y-%m-%d %H:%M:%S") if range_row and range_row[0] else "N/A"
+            max_date = range_row[1].strftime("%Y-%m-%d %H:%M:%S") if range_row and range_row[1] else "N/A"
+            
+            # Get counts for each timeframe
+            counts = {}
+            for tf in timeframes:
+                table = f"candles_{tf}"
+                count_row = con.execute(
+                    f"SELECT count(*) FROM {table} WHERE symbol = ?",
+                    [symbol]
+                ).fetchone()
+                counts[tf] = count_row[0] if count_row else 0
+                
+            config = symbol_settings.get(symbol, {})
+            
+            overview.append({
+                "symbol": symbol,
+                "description": config.get("description", f"{symbol} - Local DuckDB"),
+                "type": config.get("type", "forex"),
+                "exchange": config.get("exchange", "FOREX"),
+                "pricescale": config.get("pricescale", 100000),
+                "session": config.get("session", "24x7"),
+                "timezone": config.get("timezone", "Etc/UTC"),
+                "symbol_logo": config.get("symbol_logo", "/logos/default.png"),
+                "first_ts": min_date,
+                "last_ts": max_date,
+                "timeframe_counts": counts
+            })
+            
+        con.close()
+        return overview
+    except Exception as e:
+        logging.error("Failed to query symbols overview: %s", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/1.1/active_symbols")
+def get_active_symbols():
+    """GET /1.1/active_symbols -> returns list of unique symbols present in candles_1m"""
+    try:
+        con = get_con()
+        symbols = _all_symbols(con)
+        con.close()
+        return symbols
+    except Exception as e:
+        logging.error("Failed to query active symbols: %s", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/1.1/symbols_metadata/{symbol}")
+def get_symbol_metadata(symbol: str):
+    """GET /1.1/symbols_metadata/{symbol} -> returns min(ts) and max(ts) from candles_1m for a symbol"""
+    try:
+        con = get_con()
+        row = con.execute(
+            "SELECT min(ts), max(ts), count(*) FROM candles_1m WHERE symbol = ?",
+            [symbol.upper()]
+        ).fetchone()
+        con.close()
+        if not row or not row[0] or not row[1]:
+            raise HTTPException(status_code=404, detail=f"No data found for symbol {symbol}")
+        return {
+            "symbol": symbol.upper(),
+            "min_date": row[0].strftime("%Y-%m-%d"),
+            "max_date": row[1].strftime("%Y-%m-%d"),
+            "count": row[2]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error("Failed to query metadata for symbol %s: %s", symbol, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+APP_SETTINGS_FILE = STORAGE_DIR / "app_settings.json"
+
+@app.get("/1.1/app_settings")
+def app_settings_get():
+    """GET /1.1/app_settings -> returns current app-level settings"""
+    if not APP_SETTINGS_FILE.exists():
+        return {
+            "data_folder_path": "/home/ajinkya/projects/TestsGithub/16_july/db",
+            "default_risk_pct": 1.0,
+            "default_timeframe": "1D",
+            "theme": "dark"
+        }
+    try:
+        return json.loads(APP_SETTINGS_FILE.read_text())
+    except Exception:
+        return {
+            "data_folder_path": "/home/ajinkya/projects/TestsGithub/16_july/db",
+            "default_risk_pct": 1.0,
+            "default_timeframe": "1D",
+            "theme": "dark"
+        }
+
+
+@app.post("/1.1/app_settings")
+async def app_settings_save(request: Request):
+    """POST /1.1/app_settings -> saves/updates app-level settings"""
+    body: dict = await request.json()
+    
+    # Read existing
+    data = {
+        "data_folder_path": "/home/ajinkya/projects/TestsGithub/16_july/db",
+        "default_risk_pct": 1.0,
+        "default_timeframe": "1D",
+        "theme": "dark"
+    }
+    if APP_SETTINGS_FILE.exists():
+        try:
+            data = json.loads(APP_SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+            
+    # Update fields with basic type validation/coercion
+    if "data_folder_path" in body:
+        data["data_folder_path"] = str(body["data_folder_path"])
+    if "default_risk_pct" in body:
+        try:
+            data["default_risk_pct"] = float(body["default_risk_pct"])
+        except ValueError:
+            pass
+    if "default_timeframe" in body:
+        data["default_timeframe"] = str(body["default_timeframe"])
+    if "theme" in body:
+        data["theme"] = str(body["theme"])
+        
+    APP_SETTINGS_FILE.write_text(json.dumps(data, indent=2))
+    return {"status": "ok", "settings": data}
+
 
 
 # ===========================================================================
@@ -910,7 +1257,7 @@ async def import_csv(
                 "message": "Missing required CSV columns (time/date, open, high, low, close)"
             }
 
-    con = get_con()
+    con = duckdb.connect(str(DB_PATH), read_only=False)
     
     # Clean previous rows for this instrument in the selected timeframe table to avoid duplicates
     try:
