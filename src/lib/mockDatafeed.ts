@@ -24,12 +24,12 @@ const mockDatafeed: any = {
     setTimeout(() => {
       // Map symbols to logo URLs
       const logoMap: { [key: string]: string } = {
-        'XAUUSD': '/logos/gold.svg',
-        'XAGUSD': '/logos/silver.svg',
-        'BTCUSD': '/logos/XTVCBTC.svg',
+        'XAUUSD': './logos/gold.svg',
+        'XAGUSD': './logos/silver.svg',
+        'BTCUSD': './logos/XTVCBTC.svg',
       };
 
-      const logoUrl = logoMap[symbolName] || '/logos/default.png';
+      const logoUrl = logoMap[symbolName] || './logos/default.png';
 
       onSymbolResolvedCallback({
         name: symbolName,

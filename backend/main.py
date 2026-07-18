@@ -193,6 +193,28 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def startup_db_cleanup():
+    """Runs database cleanup on startup to ensure no legacy test data exists"""
+    logging.info("Checking database for legacy test data...")
+    try:
+        con = duckdb.connect(str(DB_PATH), read_only=False)
+        tables = ["candles_1m", "candles_5m", "candles_15m", "candles_30m", "candles_1h", "candles_4h", "candles_1d", "candles_1w"]
+        deleted_any = False
+        for t in tables:
+            # Check if table exists
+            exists = con.execute(f"SELECT 1 FROM information_schema.tables WHERE table_name = '{t}'").fetchone()
+            if exists:
+                con.execute(f"DELETE FROM {t} WHERE symbol = '5YESES'")
+                deleted_any = True
+        if deleted_any:
+            con.execute("VACUUM")
+            logging.info("Database vacuumed and cleaned from legacy test symbols.")
+        con.close()
+    except Exception as e:
+        logging.error("Failed to run startup database cleanup: %s", str(e))
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     if isinstance(exc, StarletteHTTPException):
@@ -341,7 +363,7 @@ def udf_symbols(symbol: str = Query(...)):
         "intraday_multipliers":  ["1", "5", "15", "30", "60", "240"],
         "volume_precision":      2,
         "data_status":           "streaming",
-        "symbol_logo":           symbol_config.get("symbol_logo", "/logos/default.png")
+        "symbol_logo":           symbol_config.get("symbol_logo", "./logos/default.png")
     }
 
 
@@ -998,7 +1020,7 @@ def get_symbols_overview():
                 "pricescale": config.get("pricescale", 100000),
                 "session": config.get("session", "24x7"),
                 "timezone": config.get("timezone", "Etc/UTC"),
-                "symbol_logo": config.get("symbol_logo", "/logos/default.png"),
+                "symbol_logo": config.get("symbol_logo", "./logos/default.png"),
                 "first_ts": min_date,
                 "last_ts": max_date,
                 "timeframe_counts": counts

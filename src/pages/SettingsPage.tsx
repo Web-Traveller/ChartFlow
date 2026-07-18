@@ -45,7 +45,7 @@ export default function SettingsPage() {
   const [session, setSession] = useState('24x7');
   const [timezone, setTimezone] = useState('Etc/UTC');
   const [priceScale, setPriceScale] = useState(100000);
-  const [logoUrl, setLogoUrl] = useState('/logos/default.png');
+  const [logoUrl, setLogoUrl] = useState('./logos/default.png');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -97,7 +97,7 @@ export default function SettingsPage() {
     setSession(sym.session || '24x7');
     setTimezone(sym.timezone || 'Etc/UTC');
     setPriceScale(sym.pricescale || 100000);
-    setLogoUrl(sym.symbol_logo || '/logos/default.png');
+    setLogoUrl(sym.symbol_logo || './logos/default.png');
     setSaveStatus('idle');
   };
 

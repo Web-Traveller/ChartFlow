@@ -52,13 +52,13 @@ const realDatafeed: any = {
         }
 
         // Map logo URL if not provided by backend settings
-        if (!symbolInfo.symbol_logo || symbolInfo.symbol_logo === '/logos/default.png') {
+        if (!symbolInfo.symbol_logo || symbolInfo.symbol_logo === './logos/default.png') {
           const logoMap: { [key: string]: string } = {
-            'XAUUSD': '/logos/gold.svg',
-            'XAGUSD': '/logos/silver.svg',
-            'BTCUSD': '/logos/XTVCBTC.svg',
+            'XAUUSD': './logos/gold.svg',
+            'XAGUSD': './logos/silver.svg',
+            'BTCUSD': './logos/XTVCBTC.svg',
           };
-          symbolInfo.symbol_logo = logoMap[cleanSymbolName.toUpperCase()] || symbolInfo.symbol_logo || '/logos/default.png';
+          symbolInfo.symbol_logo = logoMap[cleanSymbolName.toUpperCase()] || symbolInfo.symbol_logo || './logos/default.png';
         }
 
         setTimeout(() => {

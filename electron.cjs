@@ -28,12 +28,21 @@ function initializeUserData() {
 
   const sourceResourcesPath = process.resourcesPath;
 
-  // Copy DuckDB file if it does not exist in destination
+  // Copy DuckDB file if it does not exist in destination or size mismatches
   const dbSourceFile = path.join(sourceResourcesPath, 'db', 'market_data.duckdb');
   const dbDestFile = path.join(dbDestDir, 'market_data.duckdb');
   if (fs.existsSync(dbSourceFile)) {
-    if (!fs.existsSync(dbDestFile)) {
-      console.log(`[Electron] Copying initial database from ${dbSourceFile} to ${dbDestFile}`);
+    let shouldCopy = !fs.existsSync(dbDestFile);
+    if (fs.existsSync(dbDestFile)) {
+      const sourceSize = fs.statSync(dbSourceFile).size;
+      const destSize = fs.statSync(dbDestFile).size;
+      if (sourceSize !== destSize) {
+        console.log(`[Electron] Database size mismatch (Source: ${sourceSize}, Dest: ${destSize}). Overwriting destination to sync.`);
+        shouldCopy = true;
+      }
+    }
+    if (shouldCopy) {
+      console.log(`[Electron] Copying database from ${dbSourceFile} to ${dbDestFile}`);
       fs.copyFileSync(dbSourceFile, dbDestFile);
     }
   } else {
@@ -54,6 +63,44 @@ function initializeUserData() {
     }
   } else {
     console.warn(`[Electron Warning] Source storage presets not found at: ${storageSourceDir}`);
+  }
+
+  // Clean up legacy 5YESES reference in destination settings
+  const settingsDestFile = path.join(storageDestDir, 'symbol_settings.json');
+  if (fs.existsSync(settingsDestFile)) {
+    try {
+      const rawData = fs.readFileSync(settingsDestFile, 'utf8');
+      const data = JSON.parse(rawData);
+      if (data['5YESES']) {
+        console.log('[Electron] Removing legacy 5YESES symbol from user settings file');
+        delete data['5YESES'];
+        fs.writeFileSync(settingsDestFile, JSON.stringify(data, null, 2), 'utf8');
+      }
+    } catch (e) {
+      console.error('[Electron Error] Failed to clean legacy symbol settings:', e);
+    }
+  }
+
+  // Clean up legacy 5YESES reference in destination sessions
+  const sessionsDestFile = path.join(storageDestDir, 'sessions.json');
+  if (fs.existsSync(sessionsDestFile)) {
+    try {
+      const rawData = fs.readFileSync(sessionsDestFile, 'utf8');
+      const data = JSON.parse(rawData);
+      let modified = false;
+      for (const sessId in data) {
+        if (data[sessId] && data[sessId].symbol === '5YESES') {
+          console.log(`[Electron] Removing legacy session ${sessId} referencing symbol 5YESES`);
+          delete data[sessId];
+          modified = true;
+        }
+      }
+      if (modified) {
+        fs.writeFileSync(sessionsDestFile, JSON.stringify(data, null, 2), 'utf8');
+      }
+    } catch (e) {
+      console.error('[Electron Error] Failed to clean legacy sessions settings:', e);
+    }
   }
 }
 

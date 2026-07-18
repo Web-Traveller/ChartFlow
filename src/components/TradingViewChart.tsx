@@ -49,7 +49,7 @@ export default function TradingViewChart() {
 
     // Load TradingView library
     const script = document.createElement('script')
-    script.src = '/charting_library/charting_library.standalone.js'
+    script.src = './charting_library/charting_library.standalone.js'
     script.async = true
     script.onload = () => {
       setIsLibraryLoaded(true)
@@ -127,7 +127,7 @@ export default function TradingViewChart() {
         interval: '1D',
         container: chartContainerRef.current,
         datafeed: realDatafeed,
-        library_path: '/charting_library/',
+        library_path: './charting_library/',
         locale: 'en',
         theme: 'dark',
         autosize: true,
