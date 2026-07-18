@@ -1,8 +1,61 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
+const fs = require('fs');
 
 let pyProc = null;
+
+function initializeUserData() {
+  const isPackaged = app.isPackaged;
+  if (!isPackaged) {
+    console.log('[Electron] Running in development mode, skipping user data directory initialization.');
+    return;
+  }
+
+  const userDataPath = app.getPath('userData');
+  const dbDestDir = path.join(userDataPath, 'db');
+  const storageDestDir = path.join(userDataPath, 'storage');
+
+  console.log(`[Electron] Initializing user data directory at: ${userDataPath}`);
+
+  // Create directories if they don't exist
+  if (!fs.existsSync(dbDestDir)) {
+    fs.mkdirSync(dbDestDir, { recursive: true });
+  }
+  if (!fs.existsSync(storageDestDir)) {
+    fs.mkdirSync(storageDestDir, { recursive: true });
+  }
+
+  const sourceResourcesPath = process.resourcesPath;
+
+  // Copy DuckDB file if it does not exist in destination
+  const dbSourceFile = path.join(sourceResourcesPath, 'db', 'market_data.duckdb');
+  const dbDestFile = path.join(dbDestDir, 'market_data.duckdb');
+  if (fs.existsSync(dbSourceFile)) {
+    if (!fs.existsSync(dbDestFile)) {
+      console.log(`[Electron] Copying initial database from ${dbSourceFile} to ${dbDestFile}`);
+      fs.copyFileSync(dbSourceFile, dbDestFile);
+    }
+  } else {
+    console.error(`[Electron Error] Source database file not found at: ${dbSourceFile}`);
+  }
+
+  // Copy preset storage files
+  const storageSourceDir = path.join(sourceResourcesPath, 'backend', 'storage');
+  if (fs.existsSync(storageSourceDir)) {
+    const files = fs.readdirSync(storageSourceDir);
+    for (const file of files) {
+      const sourceFile = path.join(storageSourceDir, file);
+      const destFile = path.join(storageDestDir, file);
+      if (fs.statSync(sourceFile).isFile() && !fs.existsSync(destFile)) {
+        console.log(`[Electron] Copying config preset from ${sourceFile} to ${destFile}`);
+        fs.copyFileSync(sourceFile, destFile);
+      }
+    }
+  } else {
+    console.warn(`[Electron Warning] Source storage presets not found at: ${storageSourceDir}`);
+  }
+}
 
 function startBackend() {
   const isPackaged = app.isPackaged;
@@ -16,9 +69,21 @@ function startBackend() {
 
   console.log(`[Electron] Spawning backend process in ${backendDir} using: ${venvPython}`);
 
+  // Call user data copy/setup function
+  initializeUserData();
+
+  const spawnEnv = { 
+    ...process.env, 
+    PYTHONUNBUFFERED: '1' 
+  };
+
+  if (isPackaged) {
+    spawnEnv.CHARTFLOW_USER_DATA_PATH = app.getPath('userData');
+  }
+
   pyProc = spawn(venvPython, ['-m', 'uvicorn', 'main:app', '--port', '8000'], {
     cwd: backendDir,
-    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    env: spawnEnv
   });
 
   pyProc.stdout.on('data', (data) => {

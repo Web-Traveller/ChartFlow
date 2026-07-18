@@ -50,6 +50,31 @@ from pydantic import BaseModel
 from typing import Any, List, Dict, Optional
 
 # ---------------------------------------------------------------------------
+# Path Configuration (Dynamic for Electron/Tauri compatibility)
+# ---------------------------------------------------------------------------
+import os
+USER_DATA_PATH = os.environ.get("CHARTFLOW_USER_DATA_PATH")
+
+if USER_DATA_PATH:
+    STORAGE_DIR = Path(USER_DATA_PATH) / "storage"
+    DB_PATH = Path(USER_DATA_PATH) / "db" / "market_data.duckdb"
+else:
+    STORAGE_DIR = Path(__file__).resolve().parent / "storage"
+    DB_PATH = Path(__file__).resolve().parent.parent / "db" / "market_data.duckdb"
+
+CHARTS_DIR  = STORAGE_DIR / "charts"
+TMPL_DIR    = STORAGE_DIR / "drawing_templates"
+SETTINGS_FILE = STORAGE_DIR / "symbol_settings.json"
+APP_SETTINGS_FILE = STORAGE_DIR / "app_settings.json"
+SESSIONS_FILE = STORAGE_DIR / "sessions.json"
+log_file = STORAGE_DIR / "logs" / "app.log"
+
+# Ensure runtime directories exist
+CHARTS_DIR.mkdir(parents=True, exist_ok=True)
+TMPL_DIR.mkdir(parents=True, exist_ok=True)
+log_file.parent.mkdir(parents=True, exist_ok=True)
+
+# ---------------------------------------------------------------------------
 # Logging Setup
 # ---------------------------------------------------------------------------
 class JSONLinesHandler(logging.Handler):
@@ -111,7 +136,7 @@ class JSONLinesHandler(logging.Handler):
             self.release()
 
 # Setup logging
-log_file = Path(__file__).resolve().parent / "storage" / "logs" / "app.log"
+# log_file resolved dynamically at path configuration block
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 # Clear other handlers or prevent duplicates
@@ -124,7 +149,7 @@ if not any(isinstance(h, JSONLinesHandler) for h in logger.handlers):
 # Settings
 # ---------------------------------------------------------------------------
 
-DB_PATH = Path(__file__).resolve().parent.parent / "db" / "market_data.duckdb"
+# DB_PATH resolved dynamically at path configuration block
 
 # TradingView resolution string  →  DuckDB table suffix
 RESOLUTION_MAP: dict[str, str] = {
@@ -611,11 +636,7 @@ def udf_timescale_marks(
 # Storage: JSON files in  backend/storage/charts/<id>.json
 # ===========================================================================
 
-STORAGE_DIR = Path(__file__).resolve().parent / "storage"
-CHARTS_DIR  = STORAGE_DIR / "charts"
-TMPL_DIR    = STORAGE_DIR / "drawing_templates"
-CHARTS_DIR.mkdir(parents=True, exist_ok=True)
-TMPL_DIR.mkdir(parents=True, exist_ok=True)
+# STORAGE_DIR, CHARTS_DIR, and TMPL_DIR resolved dynamically at path configuration block
 
 
 def _chart_path(chart_id: str) -> Path:
