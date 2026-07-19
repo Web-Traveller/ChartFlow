@@ -40,7 +40,6 @@ jobs:
           
           echo "Copying standard libraries and DLLs from host Python to venv..."
           xcopy "%pythonLocation%\Lib\*" "backend\venv\Lib\" /E /Y /I
-          rmdir /S /Q "backend\venv\Lib\site-packages" 2>nul
           xcopy "%pythonLocation%\DLLs\*" "backend\venv\DLLs\" /E /Y /I
           copy /Y "%pythonLocation%\python.exe" "backend\venv\Scripts\python.exe"
           copy /Y "%pythonLocation%\pythonw.exe" "backend\venv\Scripts\pythonw.exe"
