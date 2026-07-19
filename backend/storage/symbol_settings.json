@@ -2,12 +2,11 @@
   "XAUUSD": {
     "name": "XAUUSD",
     "ticker": "XAUUSD",
-    "description": "Gold Spot",
+    "description": "Gold / U.S. Dollar (OANDA)",
     "type": "commodity",
-    "exchange": "FOREX",
-    "session": "24x7",
+    "exchange": "OANDA",
     "timezone": "Etc/UTC",
     "pricescale": 100,
-    "symbol_logo": "/logos/gold.svg"
+    "session": "24x7"
   }
 }

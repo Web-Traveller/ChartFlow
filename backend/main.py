@@ -173,6 +173,8 @@ CORS_ORIGINS = [
     "http://127.0.0.1:8005",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
@@ -185,8 +187,8 @@ app = FastAPI(title="TradingView UDF Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_origins=["*"],
+    allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=False,
     max_age=600,
@@ -195,18 +197,28 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_db_cleanup():
-    """Runs database cleanup on startup to ensure no legacy test data exists"""
+    """Runs database cleanup on startup to ensure no legacy test data exists and tables are initialized"""
     logging.info("Checking database for legacy test data...")
     try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         con = duckdb.connect(str(DB_PATH), read_only=False)
         tables = ["candles_1m", "candles_5m", "candles_15m", "candles_30m", "candles_1h", "candles_4h", "candles_1d", "candles_1w"]
         deleted_any = False
         for t in tables:
-            # Check if table exists
-            exists = con.execute(f"SELECT 1 FROM information_schema.tables WHERE table_name = '{t}'").fetchone()
-            if exists:
-                con.execute(f"DELETE FROM {t} WHERE symbol = '5YESES'")
-                deleted_any = True
+            # Create table if it doesn't exist
+            con.execute(f"""
+                CREATE TABLE IF NOT EXISTS {t} (
+                    symbol VARCHAR,
+                    ts TIMESTAMP,
+                    open DOUBLE,
+                    high DOUBLE,
+                    low DOUBLE,
+                    close DOUBLE,
+                    volume DOUBLE
+                )
+            """)
+            con.execute(f"DELETE FROM {t} WHERE symbol = '5YESES'")
+            deleted_any = True
         if deleted_any:
             con.execute("VACUUM")
             logging.info("Database vacuumed and cleaned from legacy test symbols.")
@@ -333,11 +345,10 @@ def udf_symbols(symbol: str = Query(...)):
         return {"s": "error", "errmsg": f"Unknown symbol '{clean}'"}
 
     # Load settings from file if exists
-    settings_path = Path(__file__).resolve().parent / "storage" / "symbol_settings.json"
     symbol_config = {}
-    if settings_path.exists():
+    if SETTINGS_FILE.exists():
         try:
-            symbol_config = json.loads(settings_path.read_text()).get(clean, {})
+            symbol_config = json.loads(SETTINGS_FILE.read_text()).get(clean, {})
         except Exception:
             pass
 
@@ -389,11 +400,10 @@ def udf_search(
     q = query.strip().upper()
     results = []
     
-    settings_path = Path(__file__).resolve().parent / "storage" / "symbol_settings.json"
     symbol_settings = {}
-    if settings_path.exists():
+    if SETTINGS_FILE.exists():
         try:
-            symbol_settings = json.loads(settings_path.read_text())
+            symbol_settings = json.loads(SETTINGS_FILE.read_text())
         except Exception:
             pass
 
@@ -593,11 +603,10 @@ def udf_quotes(symbols: str = Query(...)):
             """,
             [sym],
         ).fetchone()
-        settings_path = Path(__file__).resolve().parent / "storage" / "symbol_settings.json"
         symbol_settings = {}
-        if settings_path.exists():
+        if SETTINGS_FILE.exists():
             try:
-                symbol_settings = json.loads(settings_path.read_text())
+                symbol_settings = json.loads(SETTINGS_FILE.read_text())
             except Exception:
                 pass
 
@@ -868,9 +877,8 @@ class FrontendLogEntry(BaseModel):
 
 @app.post("/1.1/logs")
 async def post_frontend_logs(logs: List[FrontendLogEntry]):
-    log_file_path = Path(__file__).resolve().parent / "storage" / "logs" / "app.log"
-    log_file_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_file_path, "a", encoding="utf-8") as f:
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_file, "a", encoding="utf-8") as f:
         for entry in logs:
             level = entry.level.lower()
             if level not in ("info", "warning", "error"):
@@ -899,12 +907,11 @@ def get_logs(
     source: Optional[str] = Query(None),
     limit: int = Query(200, ge=1, le=1000)
 ):
-    log_file_path = Path(__file__).resolve().parent / "storage" / "logs" / "app.log"
-    if not log_file_path.exists():
+    if not log_file.exists():
         return []
 
     entries = []
-    with open(log_file_path, "r", encoding="utf-8") as f:
+    with open(log_file, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -923,10 +930,6 @@ def get_logs(
     recent_entries.reverse()
     return recent_entries
 
-
-@app.get("/1.1/trigger_error_test")
-def trigger_error_test():
-    raise ValueError("This is a deliberately triggered backend test error!")
 
 
 @app.get("/api/health")
@@ -979,11 +982,10 @@ def get_symbols_overview():
         symbols = _all_symbols(con)
         
         # Load symbol settings
-        settings_path = Path(__file__).resolve().parent / "storage" / "symbol_settings.json"
         symbol_settings = {}
-        if settings_path.exists():
+        if SETTINGS_FILE.exists():
             try:
-                symbol_settings = json.loads(settings_path.read_text())
+                symbol_settings = json.loads(SETTINGS_FILE.read_text())
             except Exception:
                 pass
         
@@ -1234,6 +1236,85 @@ def sessions_delete(session_id: str):
     return {"status": "error", "message": "Session not found"}
 
 
+def _resample_symbol(symbol: str, con: duckdb.DuckDBPyConnection):
+    import pandas as pd
+    import logging
+    
+    BUCKET_ORIGIN = "TIMESTAMP '2000-01-02 22:00:00'"
+    
+    # Resample intraday timeframes (5m, 15m, 30m, 1h, 4h)
+    intraday_tf = {
+        "5m": "5 minutes",
+        "15m": "15 minutes",
+        "30m": "30 minutes",
+        "1h": "1 hour",
+        "4h": "4 hours"
+    }
+    
+    for tf, interval in intraday_tf.items():
+        table_name = f"candles_{tf}"
+        con.execute(f"DELETE FROM {table_name} WHERE symbol = ?", [symbol])
+        con.execute(f"""
+            INSERT INTO {table_name} (symbol, ts, open, high, low, close, volume)
+            SELECT 
+                symbol,
+                time_bucket(INTERVAL '{interval}', ts, {BUCKET_ORIGIN}) as bucket_ts,
+                first(open ORDER BY ts) as o,
+                max(high) as h,
+                min(low) as l,
+                last(close ORDER BY ts) as c,
+                sum(volume) as v
+            FROM candles_1m
+            WHERE symbol = ?
+            GROUP BY symbol, bucket_ts
+            ORDER BY bucket_ts ASC
+        """, [symbol])
+        
+    # Resample Daily (1D) and Weekly (1W) using NY 5pm session boundaries
+    con.execute("DELETE FROM candles_1d WHERE symbol = ?", [symbol])
+    con.execute("DELETE FROM candles_1w WHERE symbol = ?", [symbol])
+    
+    df_1m = con.execute("SELECT symbol, ts, open, high, low, close, volume FROM candles_1m WHERE symbol = ?", [symbol]).df()
+    
+    if not df_1m.empty:
+        try:
+            ny_local = df_1m["ts"].dt.tz_localize("UTC").dt.tz_convert("America/New_York")
+            # Session label date shifts by 7 hours (session opening at 5pm NY on day D is labeled as D+1)
+            df_1m["session_date"] = (ny_local + pd.Timedelta(hours=7)).dt.date
+            
+            daily = (
+                df_1m.sort_values("ts")
+                .groupby(["symbol", "session_date"])
+                .agg(open=("open", "first"), high=("high", "max"),
+                     low=("low", "min"), close=("close", "last"), volume=("volume", "sum"))
+                .reset_index()
+            )
+            daily["ts"] = pd.to_datetime(daily["session_date"])
+            daily = daily[["symbol", "ts", "open", "high", "low", "close", "volume"]]
+            con.register("daily_tmp", daily)
+            con.execute("INSERT INTO candles_1d SELECT * FROM daily_tmp ORDER BY symbol, ts")
+            con.unregister("daily_tmp")
+            
+            df_1m["session_dt"] = pd.to_datetime(df_1m["session_date"])
+            df_1m["iso_year"] = df_1m["session_dt"].dt.isocalendar().year
+            df_1m["iso_week"] = df_1m["session_dt"].dt.isocalendar().week
+            
+            weekly = (
+                df_1m.sort_values("ts")
+                .groupby(["symbol", "iso_year", "iso_week"])
+                .agg(session_date=("session_date", "min"), open=("open", "first"), high=("high", "max"),
+                     low=("low", "min"), close=("close", "last"), volume=("volume", "sum"))
+                .reset_index()
+            )
+            weekly["ts"] = pd.to_datetime(weekly["session_date"])
+            weekly = weekly[["symbol", "ts", "open", "high", "low", "close", "volume"]]
+            con.register("weekly_tmp", weekly)
+            con.execute("INSERT INTO candles_1w SELECT * FROM weekly_tmp ORDER BY symbol, ts")
+            con.unregister("weekly_tmp")
+        except Exception as e:
+            logging.error("Failed NY session boundaries resampling for symbol %s: %s", symbol, str(e))
+
+
 @app.post("/1.1/import_csv")
 async def import_csv(
     symbol: str = Form(...),
@@ -1245,6 +1326,9 @@ async def import_csv(
     Imports standard or MT4 formatted CSV files into the DuckDB database tables.
     Resolutions: 1m, 1D, 1W
     """
+    import tempfile
+    import os
+    
     clean_symbol = symbol.strip().upper()
     table = "candles_1m"
     if resolution == "1D":
@@ -1264,110 +1348,128 @@ async def import_csv(
     else:
         delimiter = ","
 
-    reader = csv.DictReader(io.StringIO(csv_text), delimiter=delimiter)
-    
-    # Map headers case-insensitively to detect headers dynamically
-    fieldnames = reader.fieldnames or []
-    headers = {k.lower().strip(): k for k in fieldnames}
-
-    if format_type == "mt4":
-        date_col = "<DATE>"
-        time_col = "<TIME>"
-        open_col = "<OPEN>"
-        high_col = "<HIGH>"
-        low_col = "<LOW>"
-        close_col = "<CLOSE>"
-        volume_col = "<VOL>" if "<VOL>" in fieldnames else "<TICKVOL>"
-        
-        # Verify required headers
-        if not all(col in fieldnames for col in [date_col, time_col, open_col, high_col, low_col, close_col]):
-            return {
-                "status": "error",
-                "message": f"Missing required MT4 columns. Expected: {date_col}, {time_col}, {open_col}, {high_col}, {low_col}, {close_col}"
-            }
-    else:
-        # Standard columns mapping
-        time_col = headers.get("time") or headers.get("timestamp") or headers.get("date") or headers.get("datetime") or headers.get("ts")
-        open_col = headers.get("open") or headers.get("o")
-        high_col = headers.get("high") or headers.get("h")
-        low_col = headers.get("low") or headers.get("l")
-        close_col = headers.get("close") or headers.get("c")
-        volume_col = headers.get("volume") or headers.get("v") or headers.get("vol")
-
-        if not all([time_col, open_col, high_col, low_col, close_col]):
-            return {
-                "status": "error",
-                "message": "Missing required CSV columns (time/date, open, high, low, close)"
-            }
-
-    con = duckdb.connect(str(DB_PATH), read_only=False)
-    
-    # Clean previous rows for this instrument in the selected timeframe table to avoid duplicates
+    # Create temporary file to pass to DuckDB's read_csv
     try:
-        con.execute(f"DELETE FROM {table} WHERE symbol = ?", [clean_symbol])
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="wb") as tmp:
+            tmp.write(content)
+            tmp_path = Path(tmp.name)
     except Exception as e:
+        return {"status": "error", "message": f"Failed to write temporary file: {str(e)}"}
+
+    try:
+        lines = csv_text.splitlines()
+        if not lines:
+            return {"status": "error", "message": "The CSV file is empty."}
+        headers_line = lines[0]
+        
+        # Split and clean headers
+        fieldnames = [h.strip() for h in headers_line.split(delimiter)]
+        headers_map = {k.lower().strip(): k for k in fieldnames}
+
+        con = duckdb.connect(str(DB_PATH), read_only=False)
+        
+        # Clean previous rows for this instrument in the selected timeframe table to avoid duplicates
+        try:
+            con.execute(f"DELETE FROM {table} WHERE symbol = ?", [clean_symbol])
+        except Exception as e:
+            con.close()
+            return {"status": "error", "message": f"Failed to clean old DB records: {str(e)}"}
+
+        if format_type == "mt4":
+            date_col = "<DATE>"
+            time_col = "<TIME>"
+            open_col = "<OPEN>"
+            high_col = "<HIGH>"
+            low_col = "<LOW>"
+            close_col = "<CLOSE>"
+            volume_col = "<VOL>" if "<VOL>" in fieldnames else "<TICKVOL>" if "<TICKVOL>" in fieldnames else None
+            
+            # Verify required headers
+            missing = [col for col in [date_col, time_col, open_col, high_col, low_col, close_col] if col not in fieldnames]
+            if missing:
+                con.close()
+                return {
+                    "status": "error",
+                    "message": f"Missing required MT4 columns. Expected: {', '.join(missing)}"
+                }
+                
+            vol_expr = f'"{volume_col}"' if volume_col else "0.0"
+            
+            con.execute(f"""
+                INSERT INTO {table} (symbol, ts, open, high, low, close, volume)
+                SELECT 
+                    ? as symbol,
+                    try_cast((replace("{date_col}", '.', '-') || ' ' || "{time_col}") AS TIMESTAMP) as ts,
+                    "{open_col}" as open,
+                    "{high_col}" as high,
+                    "{low_col}" as low,
+                    "{close_col}" as close,
+                    {vol_expr} as volume
+                FROM read_csv(?, delim='\\t', header=true, ignore_errors=true)
+                WHERE try_cast((replace("{date_col}", '.', '-') || ' ' || "{time_col}") AS TIMESTAMP) IS NOT NULL
+            """, [clean_symbol, str(tmp_path)])
+        else:
+            # Standard CSV mapping
+            time_col = headers_map.get("time") or headers_map.get("timestamp") or headers_map.get("date") or headers_map.get("datetime") or headers_map.get("ts")
+            open_col = headers_map.get("open") or headers_map.get("o")
+            high_col = headers_map.get("high") or headers_map.get("h")
+            low_col = headers_map.get("low") or headers_map.get("l")
+            close_col = headers_map.get("close") or headers_map.get("c")
+            volume_col = headers_map.get("volume") or headers_map.get("v") or headers_map.get("vol")
+
+            if not all([time_col, open_col, high_col, low_col, close_col]):
+                con.close()
+                return {
+                    "status": "error",
+                    "message": "Missing required CSV columns (time/date, open, high, low, close)"
+                }
+                
+            time_col_name = headers_map[time_col.lower().strip()]
+            open_col_name = headers_map[open_col.lower().strip()]
+            high_col_name = headers_map[high_col.lower().strip()]
+            low_col_name = headers_map[low_col.lower().strip()]
+            close_col_name = headers_map[close_col.lower().strip()]
+            volume_col_name = headers_map[volume_col.lower().strip()] if volume_col else None
+
+            vol_expr = f'"{volume_col_name}"' if volume_col_name else "0.0"
+            
+            ts_expr = f"""
+                CASE WHEN try_cast("{time_col_name}" as BIGINT) IS NOT NULL 
+                     THEN CASE WHEN try_cast("{time_col_name}" as BIGINT) > 9999999999 
+                               THEN to_timestamp(try_cast("{time_col_name}" as BIGINT) / 1000) 
+                               ELSE to_timestamp(try_cast("{time_col_name}" as BIGINT)) 
+                          END 
+                     ELSE CAST("{time_col_name}" AS TIMESTAMP) 
+                END
+            """
+            
+            con.execute(f"""
+                INSERT INTO {table} (symbol, ts, open, high, low, close, volume)
+                SELECT 
+                    ? as symbol,
+                    {ts_expr} as ts,
+                    "{open_col_name}" as open,
+                    "{high_col_name}" as high,
+                    "{low_col_name}" as low,
+                    "{close_col_name}" as close,
+                    {vol_expr} as volume
+                FROM read_csv(?, delim=',', header=true, ignore_errors=true)
+            """, [clean_symbol, str(tmp_path)])
+            
+        # Get count of inserted rows
+        inserted = con.execute(f"SELECT count(*) FROM {table} WHERE symbol = ?", [clean_symbol]).fetchone()[0]
+        
+        # If we imported 1m data, automatically resample all higher timeframes using session boundaries
+        if table == "candles_1m":
+            _resample_symbol(clean_symbol, con)
+            
         con.close()
-        return {"status": "error", "message": f"Failed to clean old DB records: {str(e)}"}
-
-    inserted = 0
-    batch = []
-
-    for row in reader:
-        # 1. Parse Datetime
-        try:
-            if format_type == "mt4":
-                date_val = row[date_col].strip()
-                time_val = row[time_col].strip()
-                combined_ts = f"{date_val} {time_val}"
-                # MT4 date format: YYYY.MM.DD HH:MM:SS
-                ts = datetime.strptime(combined_ts, "%Y.%m.%d %H:%M:%S")
-            else:
-                raw_ts = row[time_col].strip()
-                if raw_ts.isdigit():
-                    val = int(raw_ts)
-                    if val > 9999999999: # milliseconds
-                        ts = datetime.utcfromtimestamp(val / 1000.0)
-                    else:
-                        ts = datetime.utcfromtimestamp(val)
-                else:
-                    cleaned_ts = raw_ts.replace("T", " ").replace("Z", "")
-                    if "." in cleaned_ts:
-                        cleaned_ts = cleaned_ts.split(".")[0]
-                    # Try datetime format or date fallback
-                    try:
-                        ts = datetime.strptime(cleaned_ts, "%Y-%m-%d %H:%M:%S")
-                    except Exception:
-                        ts = datetime.strptime(cleaned_ts.split(" ")[0].strip(), "%Y-%m-%d")
-        except Exception:
-            continue # skip invalid timestamp rows
-
-        # 2. Parse numbers
-        try:
-            o = float(row[open_col])
-            h = float(row[high_col])
-            l = float(row[low_col])
-            c = float(row[close_col])
-            v = float(row[volume_col]) if (volume_col and row.get(volume_col)) else 0.0
-        except Exception:
-            continue # skip row with conversion error
-
-        batch.append((clean_symbol, ts, o, h, l, c, v))
-        if len(batch) >= 1000:
-            con.executemany(
-                f"INSERT INTO {table} (symbol, ts, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                batch
-            )
-            inserted += len(batch)
-            batch = []
-
-    if batch:
-        con.executemany(
-            f"INSERT INTO {table} (symbol, ts, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            batch
-        )
-        inserted += len(batch)
-
-    con.close()
+    finally:
+        if tmp_path.exists():
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
     return {
         "status": "ok",

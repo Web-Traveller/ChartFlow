@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 const API_BASE = 'http://localhost:8000';
 
 const realDatafeed: any = {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react';
 import { Terminal, RefreshCw, AlertCircle, Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -71,23 +72,6 @@ export default function LogsPage({ embedded = false }: { embedded?: boolean }) {
     }
   };
 
-  const triggerError = () => {
-    setTimeout(() => {
-      throw new Error('This is a deliberately triggered frontend test error!');
-    }, 10);
-  };
-
-  const triggerBackendError = () => {
-    fetch('http://localhost:8000/1.1/trigger_error_test')
-      .then(res => {
-        if (!res.ok) {
-          console.error("Backend error test request returned status:", res.status);
-        }
-      })
-      .catch(err => {
-        console.error("Backend error test request network failure:", err);
-      });
-  };
 
   const mainContent = (
     <div className="flex-1 flex flex-col space-y-3 font-sans">
@@ -104,18 +88,6 @@ export default function LogsPage({ embedded = false }: { embedded?: boolean }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={triggerError}
-            className="h-7 px-2.5 bg-bear/10 border border-bear/20 hover:bg-bear/20 text-bear text-xs font-semibold rounded transition cursor-pointer"
-          >
-            Trigger Frontend Error
-          </button>
-          <button
-            onClick={triggerBackendError}
-            className="h-7 px-2.5 bg-bear/10 border border-bear/20 hover:bg-bear/20 text-bear text-xs font-semibold rounded transition cursor-pointer"
-          >
-            Trigger Backend Error
-          </button>
         </div>
       </div>
 

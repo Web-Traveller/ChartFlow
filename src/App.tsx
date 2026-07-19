@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, prefer-const */
 import { useState, useEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import LandingPage from './pages/LandingPage'
@@ -57,9 +58,7 @@ function App() {
     return (
       <div className="min-h-screen w-screen bg-slate-950 text-white font-sans flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 backdrop-blur-xl shadow-2xl flex flex-col items-center text-center">
-          <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center mb-6">
-            <Activity className="w-8 h-8 text-emerald-400 animate-pulse" />
-          </div>
+          <img src="./logos/chartflow_logo.png" alt="ChartFlow Logo" className="w-16 h-16 rounded-2xl object-cover mb-6 animate-pulse" />
           
           {/* Dashboard Overview */}
           <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">

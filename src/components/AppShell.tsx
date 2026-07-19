@@ -59,9 +59,7 @@ export default function AppShell({ children }: AppShellProps) {
         
         {/* Left: Logo & Application Name */}
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded bg-accent/10 border border-accent/20 flex items-center justify-center">
-            <CandlestickChart className="w-4 h-4 text-accent" />
-          </div>
+          <img src="./logos/chartflow_logo.png" alt="ChartFlow Logo" className="w-7 h-7 rounded object-cover" />
           <span className="text-sm font-bold tracking-tight text-text-primary">
             ChartFlow
           </span>

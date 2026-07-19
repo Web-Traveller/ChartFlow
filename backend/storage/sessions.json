@@ -1,12 +1,12 @@
 {
-  "da74060d": {
-    "id": "da74060d",
-    "name": "Gold 2021 Backtest",
+  "83b4a922": {
+    "id": "83b4a922",
+    "name": "Gold",
     "symbol": "XAUUSD",
     "all_instruments": false,
     "all_time": true,
     "time_start": "",
     "time_end": "",
-    "created_at": 1784164890
+    "created_at": 1784421847
   }
 }

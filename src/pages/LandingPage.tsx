@@ -8,7 +8,7 @@ export default function LandingPage() {
       <nav className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <CandlestickChart className="w-8 h-8 text-emerald-400" />
+            <img src="./logos/chartflow_logo.png" alt="ChartFlow Logo" className="w-8 h-8 rounded object-cover" />
             <span className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
               ChartFlow
             </span>
@@ -190,7 +190,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 py-12">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <CandlestickChart className="w-6 h-6 text-emerald-400" />
+              <img src="./logos/chartflow_logo.png" alt="ChartFlow Logo" className="w-6 h-6 rounded object-cover" />
               <span className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
                 ChartFlow
               </span>
