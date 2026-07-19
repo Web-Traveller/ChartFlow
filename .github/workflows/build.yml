@@ -36,6 +36,16 @@ jobs:
       - name: Create Python Virtual Environment & Install Backend Dependencies
         run: |
           python -m venv backend/venv
+          
+          echo "Copying standard libraries and DLLs from host Python to venv..."
+          xcopy "%pythonLocation%\Lib\*" "backend\venv\Lib\" /E /Y /I
+          rmdir /S /Q "backend\venv\Lib\site-packages" 2>nul
+          xcopy "%pythonLocation%\DLLs\*" "backend\venv\DLLs\" /E /Y /I
+          copy /Y "%pythonLocation%\python.exe" "backend\venv\Scripts\python.exe"
+          copy /Y "%pythonLocation%\pythonw.exe" "backend\venv\Scripts\pythonw.exe"
+          copy /Y "%pythonLocation%\python*.dll" "backend\venv\Scripts\"
+
+          echo "Installing dependencies..."
           .\backend\venv\Scripts\python -m pip install --upgrade pip
           .\backend\venv\Scripts\pip install -r backend/requirements.txt
 

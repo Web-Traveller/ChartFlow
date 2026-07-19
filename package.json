@@ -40,6 +40,7 @@
   "build": {
     "appId": "com.chartflow.desktop",
     "productName": "ChartFlow",
+    "icon": "public/logos/chartflow_logo.png",
     "directories": {
       "output": "dist-desktop"
     },
@@ -59,6 +60,7 @@
       ]
     },
     "win": {
+      "icon": "public/logos/chartflow_logo.png",
       "target": [
         "nsis"
       ]

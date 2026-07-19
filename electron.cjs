@@ -128,7 +128,7 @@ function startBackend() {
     spawnEnv.CHARTFLOW_USER_DATA_PATH = app.getPath('userData');
   }
 
-  pyProc = spawn(venvPython, ['-m', 'uvicorn', 'main:app', '--port', '8000'], {
+  pyProc = spawn(venvPython, ['-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000'], {
     cwd: backendDir,
     env: spawnEnv
   });
