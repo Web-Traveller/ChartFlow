@@ -1,0 +1,62 @@
+name: Build and Release Windows Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Windows Application
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Frontend Dependencies
+        run: npm install
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Create Python Virtual Environment & Install Backend Dependencies
+        run: |
+          python -m venv backend/venv
+          .\backend\venv\Scripts\python -m pip install --upgrade pip
+          .\backend\venv\Scripts\pip install -r backend/requirements.txt
+
+      - name: Build Frontend and Package Desktop App
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run electron:build -- --win
+
+      - name: Create Tag for Manual Workflow Run
+        if: github.ref_type != 'tag' && github.event_name == 'workflow_dispatch'
+        id: create_tag
+        shell: bash
+        run: |
+          TAG_NAME="v$(node -p "require('./package.json').version")-build-${{ github.run_number }}"
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+
+      - name: Release Installer executable
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ steps.create_tag.outputs.TAG_NAME || github.ref_name }}
+          files: |
+            dist-desktop/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
