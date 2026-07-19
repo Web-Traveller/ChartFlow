@@ -9,7 +9,7 @@ import SessionsPage from './pages/SessionsPage'
 import ImportPage from './pages/ImportPage'
 import AppShell from './components/AppShell'
 import { SessionProvider } from './context/SessionContext'
-import { Activity, ShieldAlert } from 'lucide-react'
+import { ShieldAlert } from 'lucide-react'
 
 function App() {
   const [isHealthy, setIsHealthy] = useState<boolean>(false)
@@ -53,6 +53,22 @@ function App() {
       clearTimeout(msgTimer)
     }
   }, [])
+
+  // Load and apply theme from settings on boot
+  useEffect(() => {
+    if (isHealthy) {
+      fetch('http://localhost:8000/1.1/app_settings')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.theme === 'light') {
+            document.documentElement.classList.add('light')
+          } else {
+            document.documentElement.classList.remove('light')
+          }
+        })
+        .catch(err => console.error('[Theme] Failed to load app settings:', err))
+    }
+  }, [isHealthy])
 
   if (!isHealthy) {
     return (

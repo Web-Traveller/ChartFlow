@@ -5,8 +5,7 @@ import {
   Compass,
   Calendar,
   Database,
-  Settings,
-  CandlestickChart
+  Settings
 } from "lucide-react";
 
 interface AppShellProps {

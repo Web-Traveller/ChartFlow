@@ -130,7 +130,7 @@ export default function TradingViewChart() {
         datafeed: realDatafeed,
         library_path: './charting_library/',
         locale: 'en',
-        theme: 'dark',
+        theme: document.documentElement.classList.contains('light') ? 'light' : 'dark',
         autosize: true,
         charts_storage_url: 'http://localhost:8000',
         charts_storage_api_version: '1.1',
@@ -231,14 +231,19 @@ export default function TradingViewChart() {
         })
         const moonIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`
         const sunIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`
-        themeButton.innerHTML = moonIcon
+        let currentTheme = document.documentElement.classList.contains('light') ? 'light' : 'dark'
+        themeButton.innerHTML = currentTheme === 'dark' ? moonIcon : sunIcon
         themeButton.title = 'Toggle Theme'
-        let currentTheme = 'dark'
         themeButton.addEventListener('click', () => {
           const newTheme = currentTheme === 'dark' ? 'light' : 'dark'
           widget.changeTheme(newTheme)
           currentTheme = newTheme
           themeButton.innerHTML = newTheme === 'dark' ? moonIcon : sunIcon
+          if (newTheme === 'light') {
+            document.documentElement.classList.add('light')
+          } else {
+            document.documentElement.classList.remove('light')
+          }
         })
         
         setIsLoading(false)
@@ -249,13 +254,13 @@ export default function TradingViewChart() {
   }, [isLibraryLoaded])
 
   return (
-    <div className="h-full w-full bg-slate-950 flex flex-col">
+    <div className="h-full w-full bg-bg-base flex flex-col">
       <div className="flex-1 relative min-h-0">
         {isLoading && (
-          <div className="absolute inset-0 bg-slate-950 flex items-center justify-center z-10">
+          <div className="absolute inset-0 bg-bg-base flex items-center justify-center z-10">
             <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-slate-400">Loading chart...</p>
+              <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-text-secondary">Loading chart...</p>
             </div>
           </div>
         )}

@@ -170,6 +170,12 @@ export default function SettingsPage() {
       .then(data => {
         if (data.status === 'ok') {
           setSaveAppStatus('success');
+          // Apply theme dynamically to document
+          if (appTheme === 'light') {
+            document.documentElement.classList.add('light');
+          } else {
+            document.documentElement.classList.remove('light');
+          }
         } else {
           setSaveAppStatus('error');
         }
