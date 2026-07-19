@@ -27,9 +27,9 @@
   /* =====================================================
      BRAND & ACCENTS
      ===================================================== */
-  --tv-accent: #F59E0B;
-  --tv-accent-hover: #D97706;
-  --tv-accent-soft: rgba(245, 158, 11, 0.08);
+  --tv-accent: #34D399; /* Neon Green from logo */
+  --tv-accent-hover: #22D3EE; /* Neon Cyan from logo */
+  --tv-accent-soft: rgba(52, 211, 153, 0.08);
 
   --tv-brand: var(--tv-accent);
   --tv-brand-hover: var(--tv-accent-hover);
