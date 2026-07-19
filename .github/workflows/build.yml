@@ -34,6 +34,7 @@ jobs:
           cache: 'pip'
 
       - name: Create Python Virtual Environment & Install Backend Dependencies
+        shell: cmd
         run: |
           python -m venv backend/venv
           
